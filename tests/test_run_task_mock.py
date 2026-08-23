@@ -174,3 +174,66 @@ def test_smoke_tools_come_from_suite_config(tmp_path):
     (suite / "scoring.md").write_text("# Scoring\n\nno config block\n",
                                       encoding="utf-8")
     assert suite_smoke_tools(suite) == []
+
+
+# ---------------------------------------------------------------------------
+# Scoring audit: judge checks and weak-signal warnings (Task 6)
+# ---------------------------------------------------------------------------
+
+def _smoke(suite, backend=None):
+    cmd = [sys.executable, str(HARNESS / "run_task.py"), "--smoke", "--suite", str(suite)]
+    if backend:
+        cmd += ["--backend", backend]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    return proc.returncode, json.loads(proc.stdout)
+
+
+def _write_suite(tmp_path, config, tasks):
+    suite = tmp_path / "suite"
+    suite.mkdir()
+    (suite / "scoring.md").write_text(
+        "# Scoring\n\n```json\n" + json.dumps(config) + "\n```\n", encoding="utf-8")
+    (suite / "train.jsonl").write_text(
+        "\n".join(json.dumps(t) for t in tasks) + "\n", encoding="utf-8")
+    return suite
+
+
+def test_smoke_judge_suite_checks_pass(tmp_path):
+    suite = _write_suite(tmp_path, {"soft_source": "judge", "judge_backend": "mock"},
+                         [{"id": "a", "prompt": "p",
+                           "scoring": {"mode": "checklist", "required": ["x"],
+                                       "judge": {"criteria": [{"id": "c", "desc": "d"}]}}}])
+    code, report = _smoke(suite)
+    names = [c["check"] for c in report["checks"]]
+    assert "judge:prompt" in names and "judge:criteria:a" in names
+    assert code == 0
+
+
+def test_smoke_judged_task_missing_criteria_fails(tmp_path):
+    suite = _write_suite(tmp_path, {"soft_source": "judge", "judge_backend": "mock"},
+                         [{"id": "a", "prompt": "p", "scoring": {"mode": "checklist",
+                                                                 "required": ["x"]}}])
+    code, report = _smoke(suite)
+    assert code == 1
+    bad = [c for c in report["checks"] if c["check"] == "judge:criteria:a"]
+    assert bad and bad[0]["ok"] is False
+
+
+def test_smoke_warns_weak_signal_without_judge(tmp_path):
+    suite = _write_suite(tmp_path, {"default_mode": "checklist"},
+                         [{"id": "weak", "prompt": "p",
+                           "scoring": {"mode": "checklist", "required": []}},
+                          {"id": "fine", "prompt": "p",
+                           "scoring": {"mode": "exact", "expected": "ok"}}])
+    code, report = _smoke(suite)
+    assert code == 0                       # warnings never fail smoke
+    assert len(report["warnings"]) == 1
+    assert "weak" in report["warnings"][0] and "judge" in report["warnings"][0]
+
+
+def test_smoke_no_warnings_key_regression(tmp_path):
+    suite = _write_suite(tmp_path, {"default_mode": "checklist"},
+                         [{"id": "fine", "prompt": "p",
+                           "scoring": {"mode": "exact", "expected": "ok"}}])
+    _, report = _smoke(suite)
+    assert report["warnings"] == []
