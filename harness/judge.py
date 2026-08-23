@@ -220,10 +220,16 @@ def main() -> None:
 
     # Judge model/effort ride the same env vars BACKENDS reads, remapped
     # once at startup (judge.py makes only judge calls, so this is safe).
+    # When the JUDGE var is set, copy it to the dst var so BACKENDS picks it
+    # up.  When it is absent or empty, *remove* the dst var so BACKENDS emits
+    # no --model/effort flags and the backend's default model judges instead
+    # of silently inheriting the rollout model from train.sh.
     for src, dst in (("SKILL_TRAINER_JUDGE_MODEL", "SKILL_TRAINER_MODEL"),
                      ("SKILL_TRAINER_JUDGE_EFFORT", "SKILL_TRAINER_EFFORT")):
         if os.environ.get(src):
             os.environ[dst] = os.environ[src]
+        else:
+            os.environ.pop(dst, None)
 
     suite = Path(args.suite)
     workdirs = ([Path(args.workdir)] if args.workdir else

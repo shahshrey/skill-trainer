@@ -1,5 +1,6 @@
 """Judge phase: verdict parsing, majority vote, cache, mock backend, CLI."""
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -251,3 +252,48 @@ def test_judge_workspace_real_backend_path(monkeypatch, tmp_path):
     assert r["status"] == "judged"
     j = json.loads((ws / "judge.json").read_text(encoding="utf-8"))
     assert j["criteria"] == {"tone": 1, "complete": 0}
+
+
+def test_judge_cli_model_env_remap_pop(tmp_path):
+    """SKILL_TRAINER_MODEL set (rollout) but JUDGE vars absent -> judge.json model is null.
+
+    The remap must pop SKILL_TRAINER_MODEL from the env so BACKENDS builders
+    emit no --model flag and the backend default model judges, not the rollout model.
+    """
+    suite = make_suite(tmp_path, {"soft_source": "judge", "judge_samples": 1})
+    good = verdict({"tone": True, "complete": True})
+    make_judged_ws(tmp_path, "remap_pop", judge_outputs=[good],
+                   scoring={"mode": "checklist", "required": ["some"],
+                            "judge": {"criteria": CRIT}})
+    env = {**os.environ, "SKILL_TRAINER_MODEL": "rollout-model"}
+    env.pop("SKILL_TRAINER_JUDGE_MODEL", None)
+    env.pop("SKILL_TRAINER_EFFORT", None)
+    env.pop("SKILL_TRAINER_JUDGE_EFFORT", None)
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS / "judge.py"), "--suite", str(suite),
+         "--batch", str(tmp_path / "batch"), "--backend", "mock"],
+        capture_output=True, text=True, env=env)
+    assert proc.returncode == 0, proc.stderr
+    j = json.loads((tmp_path / "batch" / "remap_pop" / "judge.json").read_text(encoding="utf-8"))
+    assert j["model"] is None, f"expected null model, got {j['model']!r}"
+
+
+def test_judge_cli_model_env_remap_set(tmp_path):
+    """SKILL_TRAINER_JUDGE_MODEL set -> judge.json records that judge model, not rollout model."""
+    suite = make_suite(tmp_path, {"soft_source": "judge", "judge_samples": 1})
+    good = verdict({"tone": True, "complete": True})
+    make_judged_ws(tmp_path, "remap_set", judge_outputs=[good],
+                   scoring={"mode": "checklist", "required": ["some"],
+                            "judge": {"criteria": CRIT}})
+    env = {**os.environ,
+           "SKILL_TRAINER_MODEL": "rollout-model",
+           "SKILL_TRAINER_JUDGE_MODEL": "judge-model"}
+    env.pop("SKILL_TRAINER_EFFORT", None)
+    env.pop("SKILL_TRAINER_JUDGE_EFFORT", None)
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS / "judge.py"), "--suite", str(suite),
+         "--batch", str(tmp_path / "batch"), "--backend", "mock"],
+        capture_output=True, text=True, env=env)
+    assert proc.returncode == 0, proc.stderr
+    j = json.loads((tmp_path / "batch" / "remap_set" / "judge.json").read_text(encoding="utf-8"))
+    assert j["model"] == "judge-model", f"expected 'judge-model', got {j['model']!r}"
