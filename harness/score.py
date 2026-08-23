@@ -120,7 +120,7 @@ def aggregate(results: dict[str, dict], suites: dict[str, str], weight: float) -
 
 
 def _score_one(payload: tuple[str, str, str]) -> tuple[str, dict, str]:
-    """Pool worker: score one workspace (rubric re-loaded per process —
+    """Pool worker: score one workspace (rubric re-loaded per process;
     render-heavy rubrics dwarf the import cost)."""
     suite_s, wd_s, mode = payload
     suite, wd = Path(suite_s), Path(wd_s)
@@ -175,7 +175,7 @@ def main() -> None:
         for key, result, suite_name in scored:
             results[key] = result
             suites[key] = suite_name
-    except Exception as exc:  # noqa: BLE001 — a scoring bug must read as crash, not 0.0
+    except Exception as exc:  # noqa: BLE001; a scoring bug must read as crash, not 0.0
         print(json.dumps({"error": f"{type(exc).__name__}: {exc}"}), file=sys.stderr)
         sys.exit(2)
 

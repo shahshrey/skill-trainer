@@ -13,7 +13,7 @@ similar evidence argue the current size works), and how much of the pool
 addresses the same root cause.
 
 Do not rank or edit the items. Only decide the count: an integer from 0 (skip
-this step — evidence too weak) to the number of items shown. Two hard
+this step, evidence too weak) to the number of items shown. Two hard
 cases with settled answers: a batch with ZERO failing receipts always
 means 0 (there is nothing to learn; runs sql06-08 confirmed noop is
 correct and cheap); edits that target a suite currently scoring perfectly

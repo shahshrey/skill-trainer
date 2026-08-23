@@ -5,14 +5,14 @@ the current skill document and a numbered edit pool (0-based).
 
 Ranking criteria, in strict priority order:
 
-1. **Systematic impact** — fixes a failure pattern recurring across many
+1. **Systematic impact.** Fixes a failure pattern recurring across many
    tasks; beats any single-task edge case.
-2. **Complementarity** — fills a real gap; duplicates of existing skill
+2. **Complementarity.** Fills a real gap; duplicates of existing skill
    content rank last.
-3. **Generality** — general principles beat rules tied to specific task
+3. **Generality.** General principles beat rules tied to specific task
    types, entities, or values.
-4. **Actionability** — concrete, checkable guidance beats vague advice.
-5. **Token efficiency** — same impact in fewer tokens ranks higher; bloat
+4. **Actionability.** Concrete, checkable guidance beats vague advice.
+5. **Token efficiency.** Same impact in fewer tokens ranks higher; bloat
    is a cost even when correct.
 
 Select at most {SELECT_BUDGET} edits. Drop edits that conflict with a

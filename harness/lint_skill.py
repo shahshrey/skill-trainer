@@ -71,7 +71,7 @@ def parse_frontmatter(text: str) -> tuple[dict, str]:
 
 
 def trainable_body(text: str) -> str:
-    """Body minus frontmatter and protected blocks — the region editors own."""
+    """Body minus frontmatter and protected blocks, the region editors own."""
     _, body = parse_frontmatter(text)
     return PROTECTED_RE.sub("", body)
 

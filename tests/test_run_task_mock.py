@@ -119,7 +119,7 @@ def test_claude_backend_honors_skill_trainer_model_env(monkeypatch):
 
 
 def test_smoke_tools_come_from_suite_config(tmp_path):
-    # The harness hardcodes no tool checks — the suite's scoring.md
+    # The harness hardcodes no tool checks; the suite's scoring.md
     # `smoke_tools` list owns them (generalization: a non-media suite
     # must not require ffmpeg).
     from run_task import suite_smoke_tools

@@ -3,7 +3,7 @@
 Convention, not suite logic: workers leave their transcript in
 output.txt and their analysis scratch as underscore-prefixed files in
 the workdir. On archive, harvest() persists the transcript tail (the
-worker's closing reasoning — root causes live there when a worker runs
+worker's closing reasoning; root causes live there when a worker runs
 out of budget mid-fix) and the small analysis artifacts. On staging,
 stage() re-presents both to the next worker so it starts where the last
 one stopped instead of re-deriving the same analysis.

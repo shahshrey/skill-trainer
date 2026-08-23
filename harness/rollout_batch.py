@@ -6,12 +6,12 @@ Usage:
       [--seeds 0] [--backend mock|claude|codex|cursor] [--mode cheap|full] \
       [--jobs 8] [--timeout 300] [--score] [--runner CMD]
 
-One (task, seed) job per private workspace <out>/<task>_s<seed>/ — workers
+One (task, seed) job per private workspace <out>/<task>_s<seed>/; workers
 never share files. Workers run harness/run_task.py; --runner CMD substitutes
 the worker command (invoked as: CMD <task> <seed> <workdir>), the testing
 hook for the heartbeat path. run_task.py already enforces SIGTERM at
 --timeout and SIGKILL at 2x, so the heartbeat guards the layer above it:
-a worker PROCESS still alive past 2x timeout (+grace) is stale — its process
+a worker PROCESS still alive past 2x timeout (+grace) is stale: its process
 group is killed and the job is requeued ONCE; a second stall marks the job
 crashed. Per-job result.json is persisted in the workspace; a batch summary
 JSON prints to stdout. --score runs score.py --batch over --out afterward
@@ -51,7 +51,7 @@ CONTAM_MAX_BYTES = 300
 
 # Some backends wrap the worker CLI in an intermediate shell. SIGKILLing a
 # worker's process group (timeout, stale-kill, run termination) reparents
-# that wrapper to PID 1, where it keeps consuming API tokens — copilot
+# that wrapper to PID 1, where it keeps consuming API tokens; copilot
 # burned hours of quota this way (user report 2026-08-03). Marker table
 # keyed by backend; add an entry when a new backend shows the pattern.
 # Markers must match ONLY harness-launched workers: cursor's IDE runs its
@@ -290,7 +290,7 @@ def main() -> None:
         "out": str(out),
     }
     if contam_final:
-        # A poisoned batch must never produce scores.json — gating on it
+        # A poisoned batch must never produce scores.json; gating on it
         # corrupts the run. Exit 3 tells the driver: wait for the limit
         # window to clear, then re-dispatch with --skip-existing.
         print(json.dumps(summary, indent=2))

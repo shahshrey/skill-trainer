@@ -10,7 +10,7 @@ Lessons encoded (2026-08-04 GIF production sweep):
 - Re-dispatching an identical configuration after a no-progress round is
   waste; two refs burned rounds 5-6 producing byte-identical attempts.
 - A timeout with no edits applied usually means the analysis budget ate
-  the fix budget — the retry needs more time, not a different strategy.
+  the fix budget; the retry needs more time, not a different strategy.
 - After repeated stalls, edit-from-feedback staging holds the worker in
   the same local optimum; a scratch attempt re-rolls the approach.
 """

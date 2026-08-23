@@ -41,7 +41,7 @@ def test_small_consistent_gain_beats_scalar_bar():
 
 
 def test_sparse_real_gain_accepts():
-    """3 fixed rollouts improve by +0.10, rest unchanged — the m72hf
+    """3 fixed rollouts improve by +0.10, rest unchanged: the m72hf
     step-5 shape. Mean 0.015, z ~1.8 -> accept."""
     base = grid(20, 0.85)
     cand_scores = dict(base)

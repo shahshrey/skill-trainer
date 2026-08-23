@@ -112,7 +112,7 @@ def test_real_target_skill_passes_lint():
     root = Path(__file__).resolve().parent.parent
     skills = sorted(root.glob("skills/*/SKILL.md"))
     if not skills:
-        pytest.skip("no skill package under skills/ — nothing to lint")
+        pytest.skip("no skill package under skills/, nothing to lint")
     for skill_md in skills:
         report = lint(skill_md)
         assert report["status"] in ("pass", "needs_work"), report

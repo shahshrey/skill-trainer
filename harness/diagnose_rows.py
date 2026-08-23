@@ -4,7 +4,7 @@
 Framework motivation (runs sql05 + the GPT test evals): editors can only
 aim edits at what receipts NAME. A flat `not_exact`/`order_wrong` hides
 whether the miss was a scope filter, an ordering variant, a rounding
-grain, or a systematic scale factor — so within-class rule variants were
+grain, or a systematic scale factor, so within-class rule variants were
 invisible to the loop (coverage.py showed identical signatures for
 different underlying mistakes). This module classifies a failed
 result-set comparison deterministically; suite rubrics append its checks.
@@ -25,7 +25,7 @@ normalization, so each string below is one stable class):
   values_drift              keys align; numeric cells differ irregularly
   rows_differ               none of the above patterns fit
 
-Purely stdlib and deterministic. hard/soft are the rubric's business —
+Purely stdlib and deterministic. hard/soft are the rubric's business;
 this module only names the failure.
 """
 from __future__ import annotations

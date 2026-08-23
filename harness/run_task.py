@@ -18,18 +18,18 @@ Behavior:
 - Times out: SIGTERM at --timeout, SIGKILL at 2x. Exit 124 on timeout.
 
 Mock backend (for testing the trainer itself): a task carries
-  requires:      ["<rule-id>", ...]  — solved iff every rule-id, normalized
+  requires:      ["<rule-id>", ...]; solved iff every rule-id, normalized
                  (lowercase, punctuation -> space), appears in the skill text
-  match:         {"<rule-id>": ["<alt phrase>", ...]} — optional alternative
+  match:         {"<rule-id>": ["<alt phrase>", ...]}; optional alternative
                  phrasings that also satisfy the rule
-  match_regex:   {"<rule-id>": ["<regex>", ...]} — optional concept groups:
+  match_regex:   {"<rule-id>": ["<regex>", ...]}; optional concept groups:
                  the rule is also satisfied if any single skill LINE matches
                  ALL of the regexes (case-insensitive). Robust to phrasing,
                  so planted-defect recovery measures inference from
                  symptoms, not phrase luck; vague edits still fail.
-  failure_hints: {"<rule-id>": "<symptom>"} — on failure, output contains the
+  failure_hints: {"<rule-id>": "<symptom>"}; on failure, output contains the
                  symptom for each missing rule (never the rule text/id)
-  noise:         0..1 — seeded per-(task,seed) probability of flubbing one
+  noise:         0..1; seeded per-(task,seed) probability of flubbing one
                  satisfied rule (or, with empty requires, of failing outright)
 
 --smoke verifies: suite requirements.txt deps importable, every binary in
@@ -155,7 +155,7 @@ def run_agent(backend: str, prompt: str, skill_text: str, extra: list[str],
     cmd = BACKENDS[backend](prompt, skill_text, extra)
     out_path = workdir / "output.txt"
     # The target agent's python3 must resolve to this venv (playwright,
-    # Pillow, numpy — as the task prompts promise).
+    # Pillow, numpy, as the task prompts promise).
     env = dict(os.environ)
     env["PATH"] = f"{Path(sys.executable).parent}:{env.get('PATH', '')}"
     start = time.monotonic()
@@ -177,7 +177,7 @@ def run_agent(backend: str, prompt: str, skill_text: str, extra: list[str],
 
 def suite_smoke_tools(suite: Path) -> list[str]:
     """Binaries the suite declares in scoring.md's fenced json config
-    (`smoke_tools`). The suite owns its tooling needs — the harness
+    (`smoke_tools`). The suite owns its tooling needs; the harness
     hardcodes none (an unconditional ffmpeg check once blocked non-media
     suites on machines without it)."""
     scoring_md = suite / "scoring.md"
@@ -217,7 +217,7 @@ def smoke(suite: Path | None, backend: str | None) -> int:
             with sync_playwright() as p:
                 ok = Path(p.chromium.executable_path).exists()
             checks.append(("chromium", ok, "run: playwright install chromium"))
-        except Exception as exc:  # noqa: BLE001 — report any failure mode
+        except Exception as exc:  # noqa: BLE001; report any failure mode
             checks.append(("chromium", False, str(exc)))
     if backend and backend != "mock":
         binary = BACKEND_BINARIES[backend]

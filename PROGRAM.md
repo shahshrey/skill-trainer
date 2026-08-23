@@ -3,30 +3,30 @@
 You are the manager agent of a skill-training run: an infinite hill-climbing
 loop that improves `skills/<skill>/SKILL.md` against a scored task suite,
 using git as the checkpoint mechanism. You orchestrate; workers execute.
-Everything you know between sessions lives on disk — treat this file as your
+Everything you know between sessions lives on disk. Treat this file as your
 whole job description.
 
 Paths below assume the repo root as working directory. `PY=.venv/bin/python`.
 
-## 0. Resume ritual — runs FIRST on every launch
+## 0. Resume ritual: runs FIRST on every launch
 
 You WILL die mid-run (context exhaustion, sleep, API errors). `train.sh`
 relaunches you until a terminal state exists. On every launch, before
 anything else, reconstruct state from disk:
 
-1. If `runs/<tag>/TERMINAL` exists: the run is over. Exit immediately.
+1. If `runs/<tag>/TERMINAL` exists, the run is over. Exit immediately.
    Otherwise `git checkout train/<skill>/<tag>` if the branch exists and
-   is not already checked out — never work from another branch.
-2. Read `runs/<tag>/config.json` — run parameters (skill, backend, K, E, L,
-   M, boundary, gate modes). No config.json and no results.tsv → fresh run:
-   go to Setup (§1).
-3. Read `results.tsv` — header comments give per-mode min_delta; rows give
+   is not already checked out. Never work from another branch.
+2. Read `runs/<tag>/config.json` for the run parameters (skill, backend,
+   K, E, L, M, boundary, gate modes). No config.json and no results.tsv
+   means a fresh run: go to Setup (§1).
+3. Read `results.tsv`. Header comments give per-mode min_delta; rows give
    step/epoch position, per-mode current/best scores, and the current
    discard streak.
-4. `git log train/<skill>/<tag>` and `git rev-parse best/<skill>` — the
+4. `git log train/<skill>/<tag>` and `git rev-parse best/<skill>` give the
    candidate history and best tag.
 5. If a `runs/<tag>/step_*/PENDING.json` exists, its candidate commit
-   is NOT an orphan — finish that step: when the batch is complete,
+   is NOT an orphan. Finish that step: when the batch is complete,
    score/gate/log it and delete PENDING.json; when incomplete,
    re-dispatch only the missing rollouts (workspaces without
    output.txt), then score/gate/log. Never re-derive edits for a
@@ -34,9 +34,9 @@ anything else, reconstruct state from disk:
    results.tsv row nor a PENDING.json is an unscored orphan:
    `git reset --hard` it away (or the §4f checkout fallback when reset
    is denied) and redo that step. Operational commits that do not touch
-   the skill (PROGRAM.md, harness, docs) are not orphans — keep them.
-6. `runs/<tag>/step_*/` — in-flight artifacts from the step you died in.
-   Receipts without a tsv row belong to the redo.
+   the skill (PROGRAM.md, harness, docs) are not orphans; keep them.
+6. `runs/<tag>/step_*/` holds in-flight artifacts from the step you died
+   in. Receipts without a tsv row belong to the redo.
 
 Then continue the loop from where the disk says you are.
 
@@ -44,7 +44,7 @@ Then continue the loop from where the disk says you are.
 
 1. Agree a run tag with the user, plus the three run parameters they own:
    rollout backend (+ parallelism/cost ceiling), and the run boundary
-   (steps, wall-clock hours, or target score). Never invent a boundary —
+   (steps, wall-clock hours, or target score). Never invent a boundary;
    ask. Defaults for the rest: K=2 val rollouts per task (K=1 only for
    noise-free mock runs), E=8 steps per epoch, L=5 edit budget,
    M=min(8, |train|) train-batch size.
@@ -57,40 +57,40 @@ Then continue the loop from where the disk says you are.
 4. Verify tooling: `$PY harness/run_task.py --smoke --suite tasks/<skill>
    --backend <backend>` must pass.
 5. Write `runs/<tag>/config.json` with every parameter above plus the gate
-   mode policy — start from `runs/CONFIG_TEMPLATE.md` (the distilled
-   canonical template; its model_note/gate_note/boundary patterns are
-   battle-tested) (see §4 costs): step gates in cheap mode, epoch/final gates
-   in full mode. "Mock" is a BACKEND, not a mode: a mock run is
-   `--backend mock --mode cheap` everywhere, single-mode.
+   mode policy. Start from `runs/CONFIG_TEMPLATE.md`; its
+   model_note/gate_note/boundary patterns come from live runs (see §4
+   costs): step gates in cheap mode, epoch/final gates in full mode.
+   "Mock" is a BACKEND, not a mode: a mock run is `--backend mock --mode
+   cheap` everywhere, single-mode.
 6. Baseline: for each gate mode the run uses, run the full val pass on the
    unmodified skill 3 times (see §5 for the val-pass procedure). Per mode:
-   `min_delta = max(0.01, (max−min of the three mixed scores) / 3)` —
-   the spread/3 approximates the standard error of the baseline mean; the
-   raw spread proved to systematically discard real gains (run m72h:
-   five independent candidates measured +0.06..0.09 over current and all
-   fell under a spread-sized bar). Current = the mean; log step 0 as
+   `min_delta = max(0.01, (max−min of the three mixed scores) / 3)`.
+   The spread/3 approximates the standard error of the baseline mean; the
+   raw spread systematically discarded real gains (run m72h: five
+   independent candidates measured +0.06..0.09 over current and all fell
+   under a spread-sized bar). Current = the mean; log step 0 as
    `keep_best`; `git tag best/<skill>` at the baseline commit. Record
    min_deltas as `#`-comments in the results.tsv header.
-   KEEP all three baseline scores.json files — they are the initial
+   KEEP all three baseline scores.json files. They are the initial
    reference set for the §4f paired gate (min_delta is only the scalar
    fallback and a reporting aid).
 7. Initialize `results.tsv` (schema in §7) and go.
 
 ## 2. What you CAN do
 
-- Edit the skill body — ONLY by dispatching editors and applying their JSON
+- Edit the skill body, ONLY by dispatching editors and applying their JSON
   via `$PY harness/apply_edits.py`. Never hand-edit the trainable body.
-- Overwrite the `PROTECTED:SLOW_UPDATE` block content and `META.md` — only
+- Overwrite the `PROTECTED:SLOW_UPDATE` block content and `META.md`, only
   at epoch boundaries, from slow-update/meta-memory worker output. Append
   execution-lapse notes to the `PROTECTED:APPENDIX` block; when it exceeds
   15 notes, dispatch a one-shot consolidation worker to dedupe and shorten.
-- Add a NEW example template `examples/<slug>/` to the skill package —
+- Add a NEW example template `examples/<slug>/` to the skill package,
   ONLY cloned from a TRAIN-split rollout that scored hard=1, packaged per
   the "Example-template packaging" section of `tasks/<skill>/scoring.md`
   (the suite names the artifact files to copy and the `<slug>.meta.json`
-  fields — at minimum {ref, hard, source}). A suite without that section
-  does not support example templates — skip this move entirely.
-  NEVER for a val/test ref — that deploys the answer into the skill and
+  fields, at minimum {ref, hard, source}). A suite without that section
+  does not support example templates; skip this move entirely.
+  NEVER for a val/test ref: that deploys the answer into the skill and
   voids the gate (post-run audits check example refs against splits).
   Adding an example IS a skill edit: it rides a candidate commit together
   with the SKILL.md line that references it, and passes the same gate.
@@ -101,7 +101,7 @@ Then continue the loop from where the disk says you are.
 
 - Modify `harness/`, `tasks/`, `prompts/`, `train.sh`, this file, or the
   frozen context of the skill (assets/, scripts/, references/, and every
-  EXISTING examples/* entry — adding new example dirs per §2 is allowed;
+  EXISTING examples/* entry; adding new example dirs per §2 is allowed,
   editing or deleting existing ones is not). Read-only ground truth.
 - Read the contents of `tasks/<skill>/val.jsonl` or `test.jsonl`, or paste
   val-task text or val receipts into any editor/ranker/learning-rate
@@ -109,49 +109,48 @@ Then continue the loop from where the disk says you are.
   receipts only. (Post-run audits grep for leaks.)
 - Install packages, change the venv, or add dependencies.
 - Compare scores across modes: current/best are tracked per mode, and the
-  best tag moves only on authoritative-mode (full; a single-mode mock run
-  is its own authoritative mode)
-  scores.
+  best tag moves only on authoritative-mode scores (full; a single-mode
+  mock run is its own authoritative mode).
 
-## 4. The step loop — LOOP FOREVER
+## 4. The step loop: LOOP FOREVER
 
-One step = propose → lint → commit → validate → gate → log.
+One step = propose, lint, commit, validate, gate, log.
 
 a. **Evidence.** Roll out the epoch's fixed train sample (M tasks, sampled
    once per epoch) in cheap mode, one rollout each, against the CURRENT
-   branch tip. Receipts produced under any other skill version are stale —
+   branch tip. Receipts produced under any other skill version are stale;
    refresh after every accepted edit. Collect: capped receipts, the recent
    `discard` rows from results.tsv (the rejected-edit buffer), and META.md.
 b. **Editors.** Fill `prompts/editor_error.md` with the failed receipts
-   (and `prompts/editor_success.md` with successful ones, when both exist)
-   → dispatch → pool the returned edits. `{FAILURE_CLASS_GUIDE}` is
-   filled from `tasks/<skill>/failure_classes.md` — the suite's
-   class → mechanism guide (row-set suites can start from
+   (and `prompts/editor_success.md` with successful ones, when both exist),
+   dispatch, and pool the returned edits. `{FAILURE_CLASS_GUIDE}` is
+   filled from `tasks/<skill>/failure_classes.md`, the suite's
+   class-to-mechanism guide (row-set suites can start from
    `harness/diagnose_rows_classes.md`). If the suite ships none, fill it
-   with: "No class guide for this suite — infer the mechanism from the
+   with: "No class guide for this suite. Infer the mechanism from the
    check names and diagnostic excerpts in the receipts."
 c. **Size the update.** If the pool exceeds L, fill `prompts/ranker.md`
    (SELECT_BUDGET=L) to rank and cut. Fill `prompts/learning_rate.md` with
-   the ranked items and step evidence → apply the top `learning_rate`
+   the ranked items and step evidence, then apply the top `learning_rate`
    items in rank order (when the pool is ≤ L the ranker is skipped and
-   pool order — error-editor edits first — IS the rank order). If it
+   pool order, error-editor edits first, IS the rank order). If it
    returns 0, log a `discard` row with description `noop: learning_rate=0`,
    run the (i) terminal check, then go to (a) with fresh evidence.
-   STEP_EVIDENCE must be factual only — scores, streak, batch counts —
-   never your characterization of the pool items; sizing them is the
+   STEP_EVIDENCE must be factual only: scores, streak, batch counts,
+   never your characterization of the pool items. Sizing them is the
    controller's job, and editorializing biases it. Exploration floor:
    after 2 consecutive `noop` steps, apply the top-ranked item anyway
-   (size 1) — a stalled optimizer gathers no information, and the gate
+   (size 1). A stalled optimizer gathers no information, and the gate
    already protects against bad edits.
 d. **Apply + lint.** Save the pre-edit skill (`git show HEAD:...`), run
    `$PY harness/apply_edits.py --skill ... --edits ...`. On a malformed
    target: re-dispatch the editor once with the error appended; on second
    failure log `crash`. Then
-   `$PY harness/lint_skill.py --skill ... --prev-skill <pre-edit>` —
-   exit 2 → `git checkout` the file back, log `discard` with description
+   `$PY harness/lint_skill.py --skill ... --prev-skill <pre-edit>`.
+   Exit 2: `git checkout` the file back, log `discard` with description
    `lint: <failed checks>`, skip to (h). Otherwise `git commit`. Immediately
    after committing, write `runs/<tag>/step_<n>/PENDING.json` with
-   `{step, pre_sha, candidate_sha, batch_dir, mode}` — you WILL die
+   `{step, pre_sha, candidate_sha, batch_dir, mode}`. You WILL die
    mid-step, and this file is how your successor finishes your step
    instead of discarding the batch. Delete it after logging the row.
 d2. **Targeted-fix verification (before ANY val spend).** Run sql07 lost
@@ -162,13 +161,13 @@ d2. **Targeted-fix verification (before ANY val spend).** Run sql07 lost
    task+seed, `harness/run_task.py`, candidate snapshot) and rescore
    them. If the targeted failures did not improve (hard still 0 AND the
    named failure class still present), the edit does not even do what it
-   was aimed at — log `discard` with description prefix `targeted-miss:`
+   was aimed at: log `discard` with description prefix `targeted-miss:`
    and reset WITHOUT running the val pass. A few cheap rollouts guard a
    22-rollout batch. (This filters "doesn't help"; "helps its target but
    hurts elsewhere" is still the val gate's job.)
 e. **Validate.** Run the val pass (§5) in the step-gate mode against the
    candidate commit.
-f. **Gate.** Prefer the PAIRED gate — it compares the candidate to the
+f. **Gate.** Prefer the PAIRED gate. It compares the candidate to the
    incumbent on identical (task, seed) rollouts, cancelling the shared
    batch noise that made scalar bars discard real gains (m72hf lost a
    +0.07 by 0.001; sql01's noise spread was 3x its own bar):
@@ -178,7 +177,7 @@ f. **Gate.** Prefer the PAIRED gate — it compares the candidate to the
    --secondary-suite <secondary, when declared> --mixed-weight <w>`
    (add `--no-best` when the step-gate mode is not authoritative).
    The reference set: the 3 baseline scores.json files at step 1, replaced
-   by the accepted candidate's val scores.json after every accept — record
+   by the accepted candidate's val scores.json after every accept. Record
    the current reference paths as a `#`-comment in results.tsv. Fall back
    to the scalar gate (`--candidate <primary_mixed> --current ... --best
    ... --min-delta ...`, plus `--cand-secondary/--current-secondary` for a
@@ -186,28 +185,30 @@ f. **Gate.** Prefer the PAIRED gate — it compares the candidate to the
    task set or K changed mid-run).
    **Near-miss retest (one per step, max).** When the paired verdict is
    reject with mean_delta > 0 and z_stat >= 0.8 (a positive effect that
-   may just be under-sampled — sql07 rejected +0.038 at z=1.0), buy more
+   may just be under-sampled; sql07 rejected +0.038 at z=1.0), buy more
    samples instead of discarding: dispatch the SAME val tasks on K fresh
-   seeds (K..2K−1) TWICE — once against the candidate snapshot, once
-   against the incumbent skill — then re-gate with all files:
+   seeds (K..2K−1) TWICE, once against the candidate snapshot and once
+   against the incumbent skill, then re-gate with all files:
    `gate.py --paired --candidate-scores <orig> <extension>
    --reference-scores <orig refs...> <incumbent extension>`. The
    extension keys pair by workspace name. Accept/reject on the combined
    verdict is final for the step; never extend twice.
-   accept/accept_new_best → keep the commit, update that mode's current;
-   move `best/<skill>` only on authoritative-mode accept_new_best.
-   reject → `git reset --hard <pre-edit SHA>`. ALWAYS reset to the SHA you
-   recorded at step start — never a relative ref like HEAD~1, which
-   silently rewinds too far when the step made no commit.
-   If the environment's permission config denies `git reset --hard`, use
-   the pre-approved equivalent: `git checkout -f -B train/<skill>/<tag>
-   <pre-edit SHA>` — never stop to ask for permission.
-g. **Log.** Append the results.tsv row (§7). Gate action → tsv status:
-   accept→`keep`, accept_new_best→`keep_best`, reject→`discard`. `discard` descriptions MUST
-   contain every rejected edit, compactly: `op@"target…"≤40chars:
-   "content…"≤80chars`, joined by ` | `. This buffer is pasted into future
-   editor prompts — it is how the optimizer remembers what failed.
-g2. **Verified-content salvage (run sql03's winning move — use it).**
+   On accept/accept_new_best, keep the commit and update that mode's
+   current; move `best/<skill>` only on authoritative-mode
+   accept_new_best. On reject, `git reset --hard <pre-edit SHA>`.
+   ALWAYS reset to the SHA you recorded at step start, never a relative
+   ref like HEAD~1, which silently rewinds too far when the step made no
+   commit. If the environment's permission config denies
+   `git reset --hard`, use the pre-approved equivalent:
+   `git checkout -f -B train/<skill>/<tag> <pre-edit SHA>`. Never stop to
+   ask for permission.
+g. **Log.** Append the results.tsv row (§7). Gate action maps to tsv
+   status: accept logs `keep`, accept_new_best logs `keep_best`, reject
+   logs `discard`. `discard` descriptions MUST contain every rejected
+   edit, compactly: `op@"target…"≤40chars: "content…"≤80chars`, joined by
+   ` | `. This buffer is pasted into future editor prompts; it is how the
+   optimizer remembers what failed.
+g2. **Verified-content salvage (run sql03's winning move; use it).**
    When gate-rejected candidates keep containing edits whose CONTENT the
    receipts verify as correct (the failure checks they target really
    disappear in their val rollouts) but whose per-step deltas are too
@@ -227,53 +228,53 @@ g3. **Rewrite candidate (Phase-7 lesson: one receipt-informed rewrite
    editor to return a complete replacement body (keep frontmatter and
    PROTECTED blocks byte-identical, <=500 lines). Lint it with
    `--max-growth 0.6` (a rewrite restructures; the per-step cap is for
-   incremental drift), then gate it EXACTLY like any candidate — paired
+   incremental drift), then gate it EXACTLY like any candidate: paired
    val pass, no special treatment. Log with description prefix
    `rewrite:`. Never run two rewrite steps back-to-back; a rejected
    rewrite counts toward the discard streak like any step.
 
-h. **Epoch boundary** (every E steps) — three moves:
+h. **Epoch boundary** (every E steps), three moves:
    1. Full-mode val pass on the epoch's final accepted skill: the
       authoritative score. Log it (`keep`/`keep_best`); this is the only
       point where the best tag moves when steps were cheap-gated.
    2. Rerun the epoch's fixed train sample under the previous epoch's
       final skill AND the current skill (cheap mode); bucket into
       regressions / persistent failures / improvements / stable successes.
-      Dispatch `prompts/slow_update.md` → overwrite the SLOW_UPDATE block;
-      dispatch `prompts/meta_memory.md` → rewrite META.md. Optionally
-      dispatch `prompts/skill_reviewer.md` and attach its report to both
-      as extra evidence (it never edits anything). Commit as
-      `epoch <n> boundary`.
+      Dispatch `prompts/slow_update.md` to overwrite the SLOW_UPDATE
+      block; dispatch `prompts/meta_memory.md` to rewrite META.md.
+      Optionally dispatch `prompts/skill_reviewer.md` and attach its
+      report to both as extra evidence (it never edits anything). Commit
+      as `epoch <n> boundary`.
    3. Protected-block changes are NOT free: rerun the full val pass, log
       it as an `epoch` row re-establishing current. If it scores below
       move-1's score minus min_delta, revert the SLOW_UPDATE change (keep
-      META.md — tasks never see it), log `discard` with prefix `epoch:`.
+      META.md; tasks never see it), log `discard` with prefix `epoch:`.
       The best tag never moves on `epoch` rows.
 h2. **Coverage check (at every epoch boundary, after move 2).** Run
    `$PY harness/coverage.py --train <this epoch's train scores.json>
    --val <latest val scores.json> --primary-suite <primary>`. The report
-   is leakage-safe by construction (check classes and counts only — no
+   is leakage-safe by construction (check classes and counts only, no
    task ids or text) and MAY be summarized into META.md. If it says
    `starved: true` for two consecutive epochs, the train split cannot
    teach what val is failing: further micro-edit steps are blind. Record
    the fact and prefer `no-progress (evidence starvation: <classes>)`
    over idling toward the boundary. If NOT starved but the same val
    failure class persists across epochs, note in META.md that the gap is
-   a within-class rule variant (finer than check classes) — rewrite
+   a within-class rule variant (finer than check classes); rewrite
    candidates (§4g3) handle those better than fragment edits.
 
 i. **Terminal check**, then loop:
-   - target score met → `success`
-   - run boundary hit → `exhausted`
-   - two consecutive `noop: learning_rate=0` steps → do not idle through
+   - target score met: `success`
+   - run boundary hit: `exhausted`
+   - two consecutive `noop: learning_rate=0` steps: do not idle through
      more; jump to the epoch boundary early (§4h) and let its moves +
      coverage check decide what happens next
-   - 6 consecutive discards → run the epoch-boundary slow-update early
-     (once), try one more step; if that also discards → `no-progress`
-   - a precondition you cannot repair (broken CLI, missing deps) →
+   - 6 consecutive discards: run the epoch-boundary slow-update early
+     (once), try one more step; if that also discards, `no-progress`
+   - a precondition you cannot repair (broken CLI, missing deps):
      `blocked`
-   - unrecoverable internal error → `crash`
-   Write `runs/<tag>/TERMINAL` as `<state>: <one-line reason>` — this is
+   - unrecoverable internal error: `crash`
+   Write `runs/<tag>/TERMINAL` as `<state>: <one-line reason>`. This is
    the only way the run ends. Never record an error or an exhausted budget
    as success.
 
@@ -284,17 +285,17 @@ concurrency cap, each in its own workspace
 `runs/<tag>/step_<n>/<mode>/task_<id>_s<seed>/`:
 
 1. Snapshot the skill dir (SKILL.md + frozen context) at the candidate SHA
-   into `runs/<tag>/step_<n>/skill/` — workers never read the live
+   into `runs/<tag>/step_<n>/skill/`. Workers never read the live
    checkout, so a later `git reset` cannot mutate a skill mid-rollout.
    Snapshot with `cp -R` of the checked-out worktree, NOT git archive:
    parts of the deployed package (example .gif/.png binaries,
    assets/profile.png) are gitignored on purpose and exist only in the
    worktree.
-   Never reset or commit while a batch is in flight — and never rebuild or
+   Never reset or commit while a batch is in flight. Never rebuild or
    mutate the TASK SUITE (refs, expected/, rubric, jsonl) either: scoring
    reads the suite live at batch end, and a rebuild mid-batch races the
    dispatcher's file copies (operator near-miss, 2026-08-01).
-2. Dispatch the batch DETACHED — you WILL die mid-batch, and a batch
+2. Dispatch the batch DETACHED. You WILL die mid-batch, and a batch
    parented to your shell dies with you:
    `nohup $PY harness/rollout_batch.py --skill <snapshot>/SKILL.md
    --suite tasks/<skill> --tasks <id,…> --seeds <0..K−1> --backend
@@ -302,56 +303,56 @@ concurrency cap, each in its own workspace
    --score --out <out> > <out>/batch.log 2>&1 &` where
    `<out> = runs/<tag>/step_<n>/<mode>`. Completion marker:
    `<out>/scores.json` (written by --score). Detach with `nohup … &`
-   plus `disown` (macOS has no setsid). Poll for the marker — never wait on
+   plus `disown` (macOS has no setsid). Poll for the marker; never wait on
    the process handle. Hold a sleep assertion for the batch's lifetime
-   (macOS: `caffeinate -is -w <driver pid>` — `-i` alone only blocks
-   IDLE sleep; a closed lid still sleeps the machine): every timeout in
-   the stack —
-   worker SIGTERM, kill-at-2x, dispatcher stale-kill — runs on the
-   MONOTONIC clock, which pauses while the machine sleeps, so an
+   (macOS: `caffeinate -is -w <driver pid>`; `-i` alone only blocks
+   IDLE sleep, so a closed lid still sleeps the machine): every timeout
+   in the stack (worker SIGTERM, kill-at-2x, dispatcher stale-kill) runs
+   on the MONOTONIC clock, which pauses while the machine sleeps, so an
    overnight batch on a sleeping laptop keeps hung workers alive for
    hours past their budget (observed 2026-08-06: 8 workers, 65 min of
-   zero filesystem activity, every timer silently stretched). The dispatcher queues at the cap, isolates each
-   rollout's workspace, and enforces the §6 heartbeat (stale worker
-   killed and requeued once; a second stall is `crashed` in its
-   result.json). A successor finding a batch with no live
-   `rollout_batch` process and no scores.json re-dispatches it — the
-   dispatcher's per-workspace outputs make the redo cheap. One-off
-   rollouts: `harness/run_task.py` with `--task <id> --workdir <ws>`.
+   zero filesystem activity, every timer silently stretched). The
+   dispatcher queues at the cap, isolates each rollout's workspace, and
+   enforces the §6 heartbeat (stale worker killed and requeued once; a
+   second stall is `crashed` in its result.json). A successor finding a
+   batch with no live `rollout_batch` process and no scores.json
+   re-dispatches it; the dispatcher's per-workspace outputs make the
+   redo cheap. One-off rollouts: `harness/run_task.py` with `--task <id>
+   --workdir <ws>`.
    Edit-from-feedback mode (optional, suite-dependent): if the suite ships
    a `prepare_edit.py`, it turns prior scored attempts into per-task
    staging dirs; add `--stage-root <dir>` to the dispatch and each staged
    task starts from its best prior attempt plus a diff report instead of
    from scratch (tasks without a staging dir are unaffected). Whether a
-   run may use it is set in config.json — mixing staged and scratch
+   run may use it is set in config.json. Mixing staged and scratch
    batches inside one gate comparison invalidates the gate.
    Three generic harness modules support this loop (suites map their
    output to domain guidance; the modules themselves know nothing about
    any suite):
-   - `harness/diagnosis.py` — `failure_signature(scores, threshold)`
+   - `harness/diagnosis.py`: `failure_signature(scores, threshold)`
      classifies a per-unit score series as pass / uniform_shortfall
      (everything fails by a similar margin: a global property is wrong) /
      clustered_shortfall (failures contiguous in a minority of units:
      wrong only there) / scattered, with failing ranges;
      `worst_blocks(cand, ref, metric)` localizes a 2-D comparison to its
      worst regions in resolution-independent fraction coordinates.
-     Shape-first feedback beats a flat worst-unit list — generic lists
+     Shape-first feedback beats a flat worst-unit list: generic lists
      plateaued in the 2026-08-04 sweep; region+shape diagnosis solved
      the stragglers.
-   - `harness/carryforward.py` — on archiving a FAILED attempt, harvest
+   - `harness/carryforward.py`: on archiving a FAILED attempt, harvest
      its transcript tail (`conclusion.txt`) and small `_*` analysis
      artifacts; on staging, re-present both so the next attempt starts
      where the last one stopped. A timed-out attempt that found the root
      cause but applied zero edits is a total loss without this.
-   - `harness/escalation.py` — `next_plan(stalls, timed_out, base)`
+   - `harness/escalation.py`: `next_plan(stalls, timed_out, base)`
      picks the next attempt's time budget and staged-vs-scratch mode:
      double the budget after a timeout or a stalled round (no new
      archive entry), and alternate scratch attempts after repeated
      stalls to escape a local optimum. `update_stalls` maintains the
      per-task counters from archive-digest deltas.
    Verify-archived principle: after any scored batch, every rollout the
-   scorer marked as a winner MUST be findable in the durable store —
-   raise and stop iterating if not. A scored-but-unarchived winner is
+   scorer marked as a winner MUST be findable in the durable store.
+   Raise and stop iterating if not. A scored-but-unarchived winner is
    silent data loss (it happened: 2026-08-04 digest-collision bug).
 3. Score the batch: `$PY harness/score.py --suite tasks/<skill>
    --batch runs/<tag>/step_<n>/<mode> --mode <mode>`. Empty or garbled
@@ -361,20 +362,20 @@ concurrency cap, each in its own workspace
 5. **Rate-limit contamination.** The dispatcher detects limit-window
    rollouts (tiny output mentioning a limit), retries them itself with
    backoff (SKILL_TRAINER_LIMIT_BACKOFF, default 5/15/45 min), and if
-   contamination persists it exits 3 WITHOUT writing scores.json — never
+   contamination persists it exits 3 WITHOUT writing scores.json. Never
    treat that as a scoreable batch and never gate on it. Recovery: wait
    out the limit window (the summary's `contaminated` list plus the
    rollout outputs name the reset time), then re-dispatch the SAME batch
-   command with `--skip-existing` — clean workspaces are kept, poisoned
+   command with `--skip-existing`; clean workspaces are kept, poisoned
    ones re-run. Repeat until scores.json exists. PENDING.json stays put
    throughout; the step simply finishes late.
 
-Cost policy (why modes exist): a suite's full mode may be expensive —
+Cost policy (why modes exist): a suite's full mode may be expensive,
 minutes of rendering/encoding/verification per rollout. Full-gating every
 step multiplies that cost by the whole epoch, so the default policy is
 cheap-mode step gates and full-mode gates only at epoch boundaries and
 final eval. Per-mode concurrency caps and timeouts are suite economics,
-owned by config.json (`concurrency`, `timeouts`) — set them at run setup,
+owned by config.json (`concurrency`, `timeouts`). Set them at run setup;
 never assume another suite's numbers. Mock runs: `--backend mock --mode
 cheap` everywhere.
 
@@ -383,13 +384,13 @@ sequential batch scoring of a large batch runs for hours (2026-08-06:
 154 workdirs, one chromium at a time). `score.py --jobs N` fans scoring
 out across processes; the dispatcher passes its own `--jobs` through.
 Rubrics should also fast-fail: sample a few spread checkpoints first and
-spend the full verification pass only on near-threshold candidates —
-full-fidelity measurement of a clearly failing attempt is pure waste.
+spend the full verification pass only on near-threshold candidates.
+Full-fidelity measurement of a clearly failing attempt is pure waste.
 
 ### 5b. Measurement validity doctrine (2026-08-06 audit)
 
 A human audit of a "45% solved" archive found 45 of 53 winners were false
-positives — every one a rubric blind spot, not a scoring bug. The lessons
+positives, every one a rubric blind spot, not a scoring bug. The lessons
 are framework doctrine, suite-agnostic:
 
 - **Score under natural execution, not only the instrumented path.** A
@@ -398,8 +399,8 @@ are framework doctrine, suite-agnostic:
   playback. Every rubric must include at least one probe that exercises
   the artifact the way a user would run it.
 - **Stratify metrics by where change happens.** Aggregate similarity is
-  dominated by the static majority of the artifact; the changing region —
-  usually the part the task is actually about — can be entirely wrong
+  dominated by the static majority of the artifact; the changing region,
+  usually the part the task is actually about, can be entirely wrong
   inside a passing aggregate. Measure the dynamic region separately and
   gate on it.
 - **Verdicts need provenance** (`harness/provenance.py`). Stamp every
@@ -412,7 +413,7 @@ are framework doctrine, suite-agnostic:
   the solved set to a human; any divergence between their judgment and
   the rubric's is a measurement bug and outranks all training work.
 - **Weak workers are rubric adversaries.** Cheap models don't just
-  produce worse artifacts — they concentrate probability mass on
+  produce worse artifacts. They concentrate probability mass on
   whatever passes the metric cheapest, finding blind spots a strong
   model never exposed. A rubric validated only against strong-model
   output will leak under a weak one.
@@ -420,7 +421,7 @@ are framework doctrine, suite-agnostic:
 ### 5c. Feedback and instrument doctrine (2026-08-16 audit)
 
 The v6 clone campaign (83 refs, ~20 sweep rounds) surfaced four
-suite-agnostic lessons about the *editing loop* and the *checkers*:
+suite-agnostic lessons about the editing loop and the checkers:
 
 - **A gate that can fail an artifact must be able to point at the
   failing region.** Scalar check names (`motion_coverage_0.56`) are
@@ -436,7 +437,7 @@ suite-agnostic lessons about the *editing loop* and the *checkers*:
   refs re-solved in the sweep immediately after their reason landed in
   FEEDBACK.md.
 - **Calibrate the instrument before trusting FAIL.** 5b is about false
-  passes; false *fails* are just as real. A repo QA gate reported 9
+  passes; false fails are just as real. A repo QA gate reported 9
   dead pages that were all measurement artifacts: a fixed viewport
   applied to variable-size artifacts, analysis downscaling that erased
   small moving features, and a sample count that aliased against long
@@ -451,7 +452,7 @@ suite-agnostic lessons about the *editing loop* and the *checkers*:
 
 Operational corollary, learned twice: any multi-hour batch driver gets
 `caffeinate -is -w <pid>` AND an external liveness check (process
-alive + log mtime advancing) at monitor cadence — two sweeps died
+alive + log mtime advancing) at monitor cadence. Two sweeps died
 silently mid-round with no in-band signal.
 
 ## 6. Workers
@@ -460,20 +461,20 @@ You are an orchestration manager, not an implementer. Rules:
 
 - Every worker gets a narrow scope, a definition of done, and the fixed
   report format from its prompt file. Fill `{PLACEHOLDERS}`, dispatch
-  headlessly with the run's worker CLI — config.json `model_note` names
-  it exactly (e.g. `claude -p "$(cat <filled>)" --model <m>` or
+  headlessly with the run's worker CLI (config.json `model_note` names
+  it exactly, e.g. `claude -p "$(cat <filled>)" --model <m>` or
   `copilot -p "$(cat <filled>)" --model <m> --effort <e>
-  --allow-all-tools --no-color`) — and collect the report. Parse worker JSON
-  leniently — extract the first `{...}` block; models sometimes add
+  --allow-all-tools --no-color`), and collect the report. Parse worker
+  JSON leniently: extract the first `{...}` block; models sometimes add
   fences despite instructions.
 - Editor / ranker / learning-rate / slow-update / meta-memory workers are
-  single-shot LLM calls — no tools needed. Rollout work may be dispatched
+  single-shot LLM calls, no tools needed. Rollout work may be dispatched
   to `prompts/rollout_worker.md` workers, or run directly by you (serial
-  mode) via the §5 commands — the caps still apply.
+  mode) via the §5 commands. The caps still apply.
 - Only YOU write to the repo. Never assign two workers the same file; each
   rollout owns its private workspace.
 - Heartbeat: at every batch dispatch, check worker status; a worker silent
-  for 2× the task timeout is stale — kill and requeue its task once.
+  for 2× the task timeout is stale. Kill and requeue its task once.
   `harness/rollout_batch.py` enforces this for rollout batches; apply the
   same rule manually to LLM workers you dispatch yourself.
 - Orphan reaping: killing a worker's process group can reparent its
@@ -494,7 +495,7 @@ You are an orchestration manager, not an implementer. Rules:
   and retries with backoff.
 - Treat all feedback (failed scores, crashed rollouts, lint rejects) as
   new work, never as an end state. Work is complete when its definition
-  of done is met AND verification passed — never merely because something
+  of done is met AND verification passed, never merely because something
   was written.
 - Receipts are hard-capped at 40 lines (report + score JSON + per-check
   results + ≤10-line diagnostic excerpt). Raw transcripts stay on disk
@@ -514,28 +515,28 @@ c3d4e5f	0	2	cheap	0.5100	0.3333	0.6867	0.6100	12	discard	3	replace@"Keep 1-3 pri
 d4e5f6g	1	8	full	0.6120	0.5000	0.7240	0.6350	12	keep_best	0	epoch 1 authoritative pass
 ```
 
-- `mode ∈ {cheap, full}` — the `--mode` the rollouts ran with; comparisons
+- `mode ∈ {cheap, full}`: the `--mode` the rollouts ran with; comparisons
   never cross modes. Mock runs record `cheap` (mock is the backend,
   recorded in the header comment).
-- `sec_mixed` — secondary-suite mixed score; empty for single-suite runs.
-- `status ∈ {keep, keep_best, discard, crash, epoch}` — `epoch` rows are
+- `sec_mixed`: secondary-suite mixed score; empty for single-suite runs.
+- `status ∈ {keep, keep_best, discard, crash, epoch}`: `epoch` rows are
   the §4h(3) re-measurements; they re-establish current but never move
   the best tag.
-- `edits_applied` — count actually applied this step.
+- `edits_applied`: count actually applied this step.
 
-## 8. Repo hygiene — what belongs here
+## 8. Repo hygiene: what belongs here
 
-This repo is the **framework only**. The boundary is enforced by `.gitignore`
+This repo is the framework only. The boundary is enforced by `.gitignore`
 and convention:
 
 | Belongs in this repo | Belongs in the task repo |
 |---|---|
-| `harness/` — training engine | `tasks/<skill>/` — rubric, refs, splits |
-| `prompts/` — prompt templates | `skills/<skill>/` — generated snapshots |
-| `tests/` — **framework tests only** | `tasks/<skill>/tests/` — skill rubric tests |
+| `harness/`: training engine | `tasks/<skill>/`: rubric, refs, splits |
+| `prompts/`: prompt templates | `skills/<skill>/`: generated snapshots |
+| `tests/`: framework tests only | `tasks/<skill>/tests/`: skill rubric tests |
 | `runs/CONFIG_TEMPLATE.md` | `runs/` sweep output, showcase artifacts |
 
-**Rule for `tests/`:** a test file belongs here only if it exercises `harness/`
+Rule for `tests/`: a test file belongs here only if it exercises `harness/`
 code with no dependency on any specific task. If a test imports from `tasks/`
 or references a skill by name, it belongs in that task's own directory, not
 here. `tasks/` is gitignored, so any task content added with `git add -f`
@@ -544,7 +545,7 @@ should be treated as a mistake and reverted.
 ## 9. NEVER STOP
 
 Once the loop starts, do not pause to ask the human anything until a
-terminal state — they may be asleep and expect you to work indefinitely.
+terminal state. They may be asleep and expect you to work indefinitely.
 Out of ideas is not terminal: re-read receipts for unexploited patterns,
 mine the rejected-edit buffer for near-misses to refine, try deletion-only
 steps (removing a bad rule is a step), lower the update size to 1. The

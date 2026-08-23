@@ -16,7 +16,7 @@ distinct sessions (--min-occurrences raises it).
 Each candidate carries the representative prompt, occurrence counts, an
 observed-outcome guess (the next user message in-session matched against
 positive/negative feedback phrases), and file#line source refs. A human
-curates candidates into train/val — this tool never writes task files.
+curates candidates into train/val; this tool never writes task files.
 """
 from __future__ import annotations
 

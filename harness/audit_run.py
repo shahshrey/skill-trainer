@@ -141,7 +141,7 @@ def audit_reproposal(rows: list[dict]) -> list[str]:
             edit = edit.strip()
             # Only edit-op fragments are fingerprints. Prose fragments (gate
             # reasons like "gate reject (paired +0.0190, …)") repeat across
-            # steps whenever the numbers coincide — sql05 hit exactly that
+            # steps whenever the numbers coincide; sql05 hit exactly that
             # false positive when two different edits drew identical deltas.
             if not EDIT_OP_RE.match(edit):
                 continue

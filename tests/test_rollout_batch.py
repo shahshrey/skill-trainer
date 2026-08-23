@@ -69,7 +69,7 @@ def test_workers_actually_run_in_parallel(tmp_path):
                   "--timeout", "30", check=True)
     wall = time.monotonic() - start
     assert len(json.loads(r.stdout)["completed"]) == 4
-    assert wall < 2.0, f"4 x 0.6s jobs took {wall:.1f}s — not parallel"
+    assert wall < 2.0, f"4 x 0.6s jobs took {wall:.1f}s, not parallel"
 
 
 def test_hung_worker_killed_and_requeued_once(tmp_path):

@@ -1,6 +1,6 @@
 """Failure-shape diagnosis for per-unit scored attempts (PROGRAM §5).
 
-Suite-agnostic: a "unit" is whatever the suite scores a sequence of —
+Suite-agnostic: a "unit" is whatever the suite scores a sequence of:
 animation frames, test cases, document pages. The 2026-08-04 production
 sweep showed generic worst-unit lists plateau after a few edit rounds;
 what unblocks a worker is knowing the SHAPE of the failure (is the whole
@@ -21,10 +21,10 @@ def failure_signature(scores: list[float], threshold: float) -> dict:
 
     Kinds:
     - pass: no unit below threshold.
-    - uniform_shortfall: nearly all units fail by a similar margin — some
+    - uniform_shortfall: nearly all units fail by a similar margin; some
       global property of the attempt is wrong, not its dynamics.
     - clustered_shortfall: failures form contiguous spans covering a
-      minority of units — the attempt is wrong in those spans only.
+      minority of units; the attempt is wrong in those spans only.
     - scattered: no clean pattern; per-unit data is the best guide.
 
     Returns {kind, fail_ranges: [[first, last], ...]} (inclusive ranges).

@@ -21,7 +21,7 @@ $(cat PROGRAM.md)"
 
 while [ ! -f "runs/$TAG/TERMINAL" ]; do
   echo "[train.sh] $(date '+%F %T') launching manager ($AGENT) for run $TAG"
-  # caffeinate: an unattended run must survive the night — block system sleep
+  # caffeinate: an unattended run must survive the night, so block system sleep
   case "$AGENT" in
     claude)  caffeinate -dims claude -p "$PROMPT" --dangerously-skip-permissions ${MODEL:+--model "$MODEL"} || true ;;
     codex)   caffeinate -dims codex exec --full-auto "$PROMPT" || true ;;

@@ -16,9 +16,9 @@ Method (suite-agnostic, stdlib, deterministic):
   every normalized check observed on any PASSING (hard==1) rollout across
   all provided batches.
 - Signatures observed in failing val rollouts but never in failing train
-  rollouts are `val_only` — the starvation signal.
+  rollouts are `val_only`, the starvation signal.
 
-LEAKAGE SAFETY: the report contains check-class names and counts ONLY —
+LEAKAGE SAFETY: the report contains check-class names and counts ONLY,
 never task ids, workspace names, prompts, or outputs. It is safe to place
 in META.md / editor-visible context; the post-run leakage audit stays
 clean by construction.

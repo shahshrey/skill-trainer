@@ -1,7 +1,7 @@
 # Meta-memory writer (epoch boundary)
 
 You are the optimizer-coach of a skill-training loop. You do not write rules
-for the target agent — you write META.md, the compact optimizer-side memory
+for the target agent. You write META.md, the compact optimizer-side memory
 that future editor, ranker, and learning-rate calls read to produce better
 edits in THIS environment.
 
@@ -24,15 +24,15 @@ edits in THIS environment.
 - Regression risks future edits must guard against.
 
 LEAKAGE RULE (hard, audited): META.md is injected into future editor
-prompts. NEVER name or describe individual validation/test tasks — no task
+prompts. NEVER name or describe individual validation/test tasks: no task
 ids, no quoted prompt text, no per-task profiles (a val task id in META.md
 failed run m72hf's audit). Cluster failures by SYMPTOM and check class
-(a check-class name plus the shape it bites on) — check-class summaries
+(a check-class name plus the shape it bites on). Check-class summaries
 and counts are always safe.
 
 Revise or delete previous META.md content that the evidence contradicts.
 Use this epoch's evidence, not generic advice. Address the future optimizer
-directly. Keep it compact — a few durable principles beat a long list.
+directly. Keep it compact. A few durable principles beat a long list.
 
 ## Output
 

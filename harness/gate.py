@@ -124,7 +124,7 @@ def decide_paired(
 
     Motivation (runs m72h/m72hf/sql01): aggregate-vs-aggregate gating with a
     spread-derived min_delta cannot resolve real gains smaller than the
-    batch noise — m72hf discarded a +0.07 candidate by 0.001 and sql01's
+    batch noise. m72hf discarded a +0.07 candidate by 0.001 and sql01's
     noise spread (0.087) dwarfed its own bar (0.029). Pairing per rollout
     removes the between-rollout variance component that both sides share.
 

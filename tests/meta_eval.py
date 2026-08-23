@@ -137,7 +137,7 @@ def class_guide(suite_dir: Path) -> str:
     guide = suite_dir / "failure_classes.md"
     if guide.exists():
         return guide.read_text()
-    return ("No class guide for this suite — infer the mechanism from the "
+    return ("No class guide for this suite. Infer the mechanism from the "
             "check names and diagnostic excerpts in the receipts.")
 
 
@@ -190,7 +190,7 @@ def run_loop(run: Run, *, max_steps: int, target: float, min_delta: float,
                          "--skill", str(run.skill), "--edits", str(edits_path)], run.wt)
                 if ap.returncode != 0:
                     # one retry with the error appended
-                    retry_prompt = editor_prompt + ("\n\n## Correction — apply failed\n"
+                    retry_prompt = editor_prompt + ("\n\n## Correction: apply failed\n"
                                                     f"{ap.stderr.strip()}\nQuote targets verbatim "
                                                     "from the current skill above, or use append. "
                                                     "Respond again with the same JSON contract.")
@@ -368,9 +368,9 @@ def buckets_text(prev_scores: dict, cur_scores: dict) -> str:
 
 
 def cmd_epochs(args) -> int:
-    """Full-machinery verification: D-rule ablation recovered by the FULL
-    machinery — E-step epochs, ranker, LR, slow-update, meta-memory,
-    results.tsv, best tag — then the audit_run.py audits over the run."""
+    """Full-machinery verification. The FULL machinery must recover a
+    D-rule ablation: E-step epochs, ranker, LR, slow-update, meta-memory,
+    results.tsv, best tag. Then audit_run.py audits over the run."""
     name = f"epochs-d{len(args.ablate)}-{int(time.time())}"
     wt = make_worktree(name)
     best_tag = f"best/mock-demo-{name}"
@@ -381,7 +381,7 @@ def cmd_epochs(args) -> int:
     try:
         run = Run(wt, "mock-demo", k_seeds=1)
         meta_path = wt / "skills" / "mock-demo" / "META.md"
-        meta_path.write_text("# Optimizer memory — mock-demo\n\n(no observations yet)\n")
+        meta_path.write_text("# Optimizer memory: mock-demo\n\n(no observations yet)\n")
         skill_text = run.skill.read_text()
         for rule in args.ablate:
             line = ABLATABLE[rule]
@@ -496,7 +496,7 @@ def cmd_epochs(args) -> int:
                                 step_dir, "editor_error_retry",
                                 fill((prompts_dir / "editor_error.md").read_text(),
                                      RECEIPTS=fail_r or ok_r, **common)
-                                + f"\n\n## Correction — apply failed\n{ap.stderr.strip()}\n"
+                                + f"\n\n## Correction: apply failed\n{ap.stderr.strip()}\n"
                                 "Quote targets verbatim from the current skill above, or use "
                                 "append. Respond again with the same JSON contract.")
                             use = retry.get("edits", [])[:max(lr, 1)]

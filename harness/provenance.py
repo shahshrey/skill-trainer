@@ -1,4 +1,4 @@
-"""Verdict provenance — version every stored verdict; re-judge on upgrade.
+"""Verdict provenance: version every stored verdict; re-judge on upgrade.
 
 Lesson (2026-08-06): a human audit found 45 of 53 archived winners were
 false positives under a strengthened rubric. A verdict is only as good as
@@ -26,7 +26,7 @@ def stamp(meta: dict, version: str) -> dict:
 
 def stale(meta: dict, current: str) -> bool:
     """True when the verdict predates `current` and must be re-judged.
-    Un-versioned verdicts are always stale — provenance unknown."""
+    Un-versioned verdicts are always stale: provenance unknown."""
     return meta.get(VERSION_KEY) != current
 
 
