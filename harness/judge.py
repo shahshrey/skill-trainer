@@ -90,5 +90,150 @@ def majority(samples: list[dict], criteria_ids: list[str]) -> tuple[dict[str, in
     return criteria, soft
 
 
+class JudgeError(Exception):
+    """A judged workspace produced no usable verdict; crash, never 0.0."""
+
+
+def _sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _mock_sample(task: dict, i: int) -> str:
+    outputs = list((task.get("mock") or {}).get("judge_outputs") or [])
+    if not outputs:
+        raise JudgeError(f"task {task.get('id')!r}: mock judge backend needs "
+                         "task['mock']['judge_outputs']")
+    return outputs[i % len(outputs)]
+
+
+def build_prompt(task: dict, criteria: list[dict], output: str) -> str:
+    raise NotImplementedError("real judge backends land with prompts/judge.md")
+
+
+def run_judge_backend(backend: str, prompt: str, timeout: int) -> str:
+    raise NotImplementedError("real judge backends land with prompts/judge.md")
+
+
+def collect_samples(task: dict, backend: str, n: int, prompt: str,
+                    criteria_ids: list[str], timeout: int) -> tuple[list[dict], list[str]]:
+    """N samples; an unparseable sample gets one retry, then a flag."""
+    samples, flags = [], []
+    for i in range(n):
+        verdict = None
+        for _attempt in range(2):
+            if backend == "mock":
+                stdout = _mock_sample(task, i)
+            else:
+                stdout = run_judge_backend(backend, prompt, timeout)  # Task 3
+            verdict = parse_verdict(stdout, criteria_ids)
+            if verdict is not None:
+                break
+        if verdict is None:
+            flags.append(f"sample_{i}_unparseable")
+        else:
+            samples.append(verdict)
+    return samples, flags
+
+
+def judge_workspace(suite: Path, workdir: Path, backend: str | None,
+                    samples: int | None, force: bool, timeout: int) -> dict:
+    config = suite_config(suite)
+    task = json.loads((workdir / "task.json").read_text(encoding="utf-8"))
+    spec = resolve_judge(task, config)
+    if spec is None:
+        return {"status": "skipped"}
+    output_path = workdir / "output.txt"
+    output = output_path.read_text(encoding="utf-8") if output_path.exists() else ""
+    if not output.strip():
+        # score.py's output_empty early-return owns this case; a verdict
+        # on nothing would only mask a rollout failure.
+        return {"status": "empty"}
+    sha = _sha256(output)
+    judge_path = workdir / "judge.json"
+    if judge_path.exists() and not force:
+        try:
+            if json.loads(judge_path.read_text(encoding="utf-8")).get("output_sha256") == sha:
+                return {"status": "cached"}
+        except json.JSONDecodeError:
+            pass  # corrupt cache -> re-judge
+    resolved_backend = backend or spec["backend"]
+    if not resolved_backend:
+        raise JudgeError(f"task {task.get('id')!r}: no judge backend "
+                         "(pass --backend or set judge_backend in scoring.md)")
+    n = samples or spec["samples"]
+    criteria_ids = [c["id"] for c in spec["criteria"]]
+    prompt = ("" if resolved_backend == "mock"
+              else build_prompt(task, spec["criteria"], output))  # Task 3
+    verdicts, flags = collect_samples(task, resolved_backend, n, prompt,
+                                      criteria_ids, timeout)
+    if not verdicts:
+        raise JudgeError(f"task {task.get('id')!r}: all {n} judge samples unparseable")
+    criteria, soft = majority(verdicts, criteria_ids)
+    judge_path.write_text(json.dumps({
+        "output_sha256": sha,
+        "backend": resolved_backend,
+        "model": os.environ.get("SKILL_TRAINER_MODEL"),
+        "samples": verdicts,
+        "criteria": criteria,
+        "soft": soft,
+        "flags": flags,
+    }, indent=2), encoding="utf-8")
+    return {"status": "judged", "soft": soft}
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--suite", required=True, help="tasks/<skill-name> directory")
+    ap.add_argument("--workdir", help="single task workspace to judge")
+    ap.add_argument("--batch", help="directory of task workspaces")
+    ap.add_argument("--backend", choices=["mock", *BACKENDS],
+                    help="overrides scoring.md judge_backend")
+    ap.add_argument("--samples", type=int, help="overrides scoring.md judge_samples")
+    ap.add_argument("--jobs", type=int,
+                    default=int(os.environ.get("SKILL_TRAINER_JUDGE_JOBS", "1")),
+                    help="parallel judge workers (CLI calls are wall-clock bound)")
+    ap.add_argument("--force", action="store_true", help="ignore cached judge.json")
+    ap.add_argument("--timeout", type=int, default=120, help="per-sample timeout (s)")
+    args = ap.parse_args()
+    if bool(args.workdir) == bool(args.batch):
+        ap.error("exactly one of --workdir / --batch is required")
+
+    # Judge model/effort ride the same env vars BACKENDS reads, remapped
+    # once at startup (judge.py makes only judge calls, so this is safe).
+    for src, dst in (("SKILL_TRAINER_JUDGE_MODEL", "SKILL_TRAINER_MODEL"),
+                     ("SKILL_TRAINER_JUDGE_EFFORT", "SKILL_TRAINER_EFFORT")):
+        if os.environ.get(src):
+            os.environ[dst] = os.environ[src]
+
+    suite = Path(args.suite)
+    workdirs = ([Path(args.workdir)] if args.workdir else
+                sorted(d for d in Path(args.batch).iterdir()
+                       if d.is_dir() and (d / "task.json").exists()))
+
+    statuses: dict[str, str] = {}
+    errors: dict[str, str] = {}
+
+    def one(wd: Path) -> None:
+        try:
+            statuses[wd.name] = judge_workspace(
+                suite, wd, args.backend, args.samples, args.force, args.timeout)["status"]
+        except Exception as exc:  # noqa: BLE001; a judging bug must read as crash
+            errors[wd.name] = f"{type(exc).__name__}: {exc}"
+
+    if args.jobs > 1:
+        with ThreadPoolExecutor(max_workers=args.jobs) as ex:
+            list(ex.map(one, workdirs))
+    else:
+        for wd in workdirs:
+            one(wd)
+
+    summary = {k: sorted(n for n, s in statuses.items() if s == k)
+               for k in ("judged", "cached", "skipped", "empty")}
+    if errors:
+        print(json.dumps({**summary, "errors": errors}), file=sys.stderr)
+        sys.exit(2)
+    print(json.dumps(summary, indent=2))
+
+
 if __name__ == "__main__":
-    raise SystemExit("CLI lands in a later commit")
+    main()
