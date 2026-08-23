@@ -122,6 +122,87 @@ def test_stale_kill_reaps_the_whole_process_group(tmp_path):
     assert not alive, f"orphaned sleep child pid={pid} survived the group kill"
 
 
+def _make_judged_suite(tmp_path, judge_outputs=None):
+    """Suite for judge-integration tests: checklist hard score, judge soft."""
+    criteria = [{"id": "c1", "desc": "criterion 1"},
+                {"id": "c2", "desc": "criterion 2"}]
+    # A verdict that passes 1 of 2 criteria → soft = 0.5
+    good_verdict = (
+        "```json\n"
+        + json.dumps({"criteria": {"c1": True, "c2": False}, "notes": ""})
+        + "\n```\n"
+    )
+    if judge_outputs is None:
+        judge_outputs = [good_verdict]
+
+    suite = tmp_path / "suite"
+    suite.mkdir()
+    # judge_samples: 1 so one canned verdict is the whole sample set
+    (suite / "scoring.md").write_text(
+        "```json\n"
+        + json.dumps({
+            "default_mode": "checklist",
+            "mixed_weight": 0.5,
+            "judge_samples": 1,
+        })
+        + "\n```\n"
+    )
+    task = {
+        "id": "jt00",
+        "suite": "primary",
+        "requires": ["say-hello"],
+        "failure_hints": {"say-hello": "forgot to say hello"},
+        "scoring": {
+            "mode": "checklist",
+            "required": ["RESULT: solved"],
+            "soft_source": "judge",
+            "judge": {"criteria": criteria},
+        },
+        "mock": {"judge_outputs": judge_outputs},
+    }
+    (suite / "train.jsonl").write_text(json.dumps(task))
+    skill = tmp_path / "SKILL.md"
+    skill.write_text("# Skill\nAlways say hello first.\n")
+    return suite, skill
+
+
+def test_score_flag_judges_before_scoring(tmp_path):
+    # Suite: default_mode checklist, soft_source judge, judge_samples 1.
+    # One mock task whose mock rollout output PASSes its checklist and whose
+    # task["mock"]["judge_outputs"] is a single verdict passing 1 of 2
+    # criteria. Dispatch rollout_batch with --backend mock --score.
+    #
+    # Assert: exit 0; <out>/scores.json exists; the task's entry has
+    # soft == 0.5, soft_source == "judge", and judge.json exists in the
+    # task workspace (i.e. judge.py ran with the mock backend before
+    # score.py, despite no judge_backend in scoring.md).
+    suite, skill = _make_judged_suite(tmp_path)
+    out = tmp_path / "out"
+    r = run_batch("--skill", str(skill), "--suite", str(suite),
+                  "--tasks", "jt00", "--out", str(out),
+                  "--backend", "mock", "--score", check=True)
+    summary = json.loads(r.stdout)
+    assert summary["crashed"] == []
+    scores = json.loads((out / "scores.json").read_text())
+    entry = scores["tasks"]["jt00_s0"]
+    assert entry["soft"] == 0.5
+    assert entry["soft_source"] == "judge"
+    assert (out / "jt00_s0" / "judge.json").exists()
+
+
+def test_score_flag_judge_error_blocks_scores(tmp_path):
+    # Same setup but judge_outputs = ["garbage"]: rollout_batch must exit 2,
+    # print a summary containing "judge_error", and write NO scores.json.
+    suite, skill = _make_judged_suite(tmp_path, judge_outputs=["garbage"])
+    out = tmp_path / "out"
+    r = run_batch("--skill", str(skill), "--suite", str(suite),
+                  "--tasks", "jt00", "--out", str(out),
+                  "--backend", "mock", "--score")
+    assert r.returncode == 2
+    assert "judge_error" in r.stdout
+    assert not (out / "scores.json").exists()
+
+
 def test_stage_root_threads_through_to_run_task(tmp_path):
     """--stage-root adds --stage only for tasks that have a staging dir."""
     import argparse
