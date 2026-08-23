@@ -107,11 +107,31 @@ def _mock_sample(task: dict, i: int) -> str:
 
 
 def build_prompt(task: dict, criteria: list[dict], output: str) -> str:
-    raise NotImplementedError("real judge backends land with prompts/judge.md")
+    """str.replace, never .format: agent output and task prompts contain
+    braces. AGENT_OUTPUT goes last so placeholder-looking text inside the
+    output cannot be re-substituted."""
+    template = PROMPT_TEMPLATE.read_text(encoding="utf-8")
+    criteria_block = "\n".join(f"- {c['id']}: {c['desc']}" for c in criteria)
+    return (template
+            .replace("{TASK_PROMPT}", str(task.get("prompt", "")))
+            .replace("{CRITERIA}", criteria_block)
+            .replace("{AGENT_OUTPUT}", output))
 
 
 def run_judge_backend(backend: str, prompt: str, timeout: int) -> str:
-    raise NotImplementedError("real judge backends land with prompts/judge.md")
+    """One judge CLI call in a throwaway scratch dir (the judge needs no
+    files and must not touch the rollout workspace). The judge never sees
+    SKILL.md: the skill_text slot carries only the judge system line.
+    Timeout returns "" and counts as an unparseable sample upstream."""
+    cmd = BACKENDS[backend](prompt, JUDGE_SYSTEM, [])
+    with tempfile.TemporaryDirectory(prefix="judge_") as scratch:
+        try:
+            proc = subprocess.run(cmd, cwd=scratch, capture_output=True,
+                                  text=True, stdin=subprocess.DEVNULL,
+                                  timeout=timeout)
+        except subprocess.TimeoutExpired:
+            return ""
+    return (proc.stdout or "") + ("\n" + proc.stderr if proc.stderr else "")
 
 
 def collect_samples(task: dict, backend: str, n: int, prompt: str,
