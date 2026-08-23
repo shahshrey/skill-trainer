@@ -92,8 +92,10 @@ pure-noise suite the trainer correctly accepts ~nothing:
 2. The manager applies them, runs the lint gate, and commits the
    candidate.
 3. Parallel rollout workers run the candidate against a held-out
-   validation set. `score.py` turns the outputs into a number,
-   deterministically, with no LLM judging.
+   validation set. For suites that opt into judge scoring,
+   `rollout_batch.py --score` first runs `harness/judge.py` (your agent
+   CLI grades outputs; verdicts cached in `judge.json`), then `score.py`
+   reads them. Scoring is deterministic either way.
 4. If the candidate is strictly better, the branch advances. Otherwise
    `git reset --hard`, and the rejected edit text goes into a buffer
    future editors read.
