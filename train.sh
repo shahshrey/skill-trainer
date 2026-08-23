@@ -8,7 +8,7 @@ TAG="${2:?usage: ./train.sh <skill-name> <tag> [agent-cli] [model]}"
 AGENT="${3:-claude}"
 MODEL="${4:-}"                     # explicit model for the manager
 ROLLOUT_MODEL="${5:-$MODEL}"       # rollout model (defaults to manager's)
-EFFORT="${6:-}"                    # reasoning effort (copilot backends)
+EFFORT="${6:-}"                    # reasoning effort (copilot/codex backends)
 export SKILL_TRAINER_MODEL="$ROLLOUT_MODEL"  # run_task.py backends read these
 export SKILL_TRAINER_EFFORT="$EFFORT"
 cd "$(dirname "$0")"
@@ -24,9 +24,14 @@ while [ ! -f "runs/$TAG/TERMINAL" ]; do
   # caffeinate: an unattended run must survive the night, so block system sleep
   case "$AGENT" in
     claude)  caffeinate -dims claude -p "$PROMPT" --dangerously-skip-permissions ${MODEL:+--model "$MODEL"} || true ;;
-    codex)   caffeinate -dims codex exec --full-auto "$PROMPT" || true ;;
+    codex)   caffeinate -dims codex exec --sandbox workspace-write \
+               ${MODEL:+--model "$MODEL"} \
+               ${EFFORT:+-c "model_reasoning_effort=$EFFORT"} -- "$PROMPT" || true ;;
     copilot) caffeinate -dims copilot -p "$PROMPT" --allow-all-tools --no-color \
                ${MODEL:+--model "$MODEL"} ${EFFORT:+--effort "$EFFORT"} || true ;;
+    # cursor model ids bake in reasoning effort (…-high), so no effort flag
+    cursor|cursor-agent) caffeinate -dims cursor-agent -p --force --trust \
+               ${MODEL:+--model "$MODEL"} -- "$PROMPT" || true ;;
     *)       "$AGENT" -p "$PROMPT" || true ;;
   esac
   [ -f "runs/$TAG/TERMINAL" ] || sleep 30

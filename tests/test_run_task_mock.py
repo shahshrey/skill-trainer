@@ -118,6 +118,32 @@ def test_claude_backend_honors_skill_trainer_model_env(monkeypatch):
     assert cmd[i + 1] == "claude-fable-5" and cmd[-1] == "--extra"
 
 
+def test_codex_backend_honors_model_and_effort_env(monkeypatch):
+    from run_task import BACKENDS
+    monkeypatch.delenv("SKILL_TRAINER_MODEL", raising=False)
+    monkeypatch.delenv("SKILL_TRAINER_EFFORT", raising=False)
+    cmd = BACKENDS["codex"]("p", "s", [])
+    assert "-m" not in cmd and not any(a.startswith("model_reasoning_effort") for a in cmd)
+    # --full-auto was removed in codex 0.149; workspace-write replaces it
+    assert "--full-auto" not in cmd
+    assert cmd[cmd.index("--sandbox") + 1] == "workspace-write"
+    monkeypatch.setenv("SKILL_TRAINER_MODEL", "gpt-5.3")
+    monkeypatch.setenv("SKILL_TRAINER_EFFORT", "high")
+    cmd = BACKENDS["codex"]("p", "s", [])
+    assert cmd[cmd.index("-m") + 1] == "gpt-5.3"
+    assert cmd[cmd.index("-c") + 1] == "model_reasoning_effort=high"
+
+
+def test_cursor_backend_honors_model_env(monkeypatch):
+    from run_task import BACKENDS
+    monkeypatch.delenv("SKILL_TRAINER_MODEL", raising=False)
+    cmd = BACKENDS["cursor"]("p", "s", [])
+    assert "--model" not in cmd
+    monkeypatch.setenv("SKILL_TRAINER_MODEL", "claude-sonnet-5-low")
+    cmd = BACKENDS["cursor"]("p", "s", [])
+    assert cmd[cmd.index("--model") + 1] == "claude-sonnet-5-low"
+
+
 def test_smoke_tools_come_from_suite_config(tmp_path):
     # The harness hardcodes no tool checks; the suite's scoring.md
     # `smoke_tools` list owns them (generalization: a non-media suite

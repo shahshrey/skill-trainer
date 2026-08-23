@@ -141,8 +141,11 @@ optimizer memory in `META.md` beside it.
 .venv/bin/python harness/run_task.py --smoke --suite tasks/<skill> --backend claude
 
 # Launch; keeps the manager alive until a terminal state.
-# The third argument picks the agent: claude | codex | copilot | cursor-agent
+# The third argument picks the agent: claude | codex | copilot | cursor
+# Optional args 4-6: manager model, rollout model, reasoning effort.
 ./train.sh <skill-name> <tag> claude
+./train.sh <skill-name> <tag> codex gpt-5.3
+./train.sh <skill-name> <tag> cursor claude-sonnet-5-low
 ```
 
 Before a real run, copy `runs/CONFIG_TEMPLATE.md`'s JSON into

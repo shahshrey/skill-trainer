@@ -60,9 +60,18 @@ BACKENDS = {
          "--dangerously-skip-permissions",
          *(["--model", os.environ["SKILL_TRAINER_MODEL"]]
            if os.environ.get("SKILL_TRAINER_MODEL") else []), *extra]),
+    # OpenAI Codex CLI (headless). --full-auto was removed in codex 0.149;
+    # --sandbox workspace-write is its replacement (exec never prompts, so no
+    # approval flag is needed). --skip-git-repo-check keeps rollouts working
+    # when the workdir sits outside any git repo. Model via -m; reasoning
+    # effort has no flag of its own, only the config override.
     "codex": lambda prompt, skill_text, extra: (
-        ["codex", "exec", "--full-auto", *extra, "--",
-         skill_text + "\n\n---\n\n" + prompt]),
+        ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check",
+         *(["-m", os.environ["SKILL_TRAINER_MODEL"]]
+           if os.environ.get("SKILL_TRAINER_MODEL") else []),
+         *(["-c", "model_reasoning_effort=" + os.environ["SKILL_TRAINER_EFFORT"]]
+           if os.environ.get("SKILL_TRAINER_EFFORT") else []),
+         *extra, "--", skill_text + "\n\n---\n\n" + prompt]),
     # Cursor agent CLI (headless). --trust skips the workspace-trust prompt,
     # --force auto-allows commands; both are required for unattended runs.
     # Model id bakes in reasoning effort (e.g. cursor-grok-4.5-high), so
