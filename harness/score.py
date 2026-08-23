@@ -18,6 +18,8 @@ default declared in the first fenced ```json block of tasks/X/scoring.md:
   rubric     tasks/X/rubric.py::score(task, workdir, mode) -> {hard, soft, checks}
              (suite-specific deps allowed there; this harness core is stdlib)
 
+Judged suites (soft_source "judge" in the task or suite config): hard stays from the mode above; soft is read from judge.json written by judge.py. Scoring itself stays deterministic and makes no LLM calls.
+
 Batch aggregates are reported overall and per task["suite"] value (e.g.
 "clone" vs "workflow-A") so the manager can apply the two-suite gate rule.
 mixed = (1-w)*hard + w*soft with w from suite config (default 0.5).
@@ -27,6 +29,7 @@ Deterministic; no LLM calls. Exit 0 on success, 2 on scoring errors.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -58,7 +61,26 @@ def load_rubric(suite: Path):
     return module
 
 
-def score_task(task: dict, workdir: Path, mode: str, config: dict, rubric) -> dict:
+def apply_judge_soft(result: dict, workdir: Path, output: str) -> dict:
+    """Overlay the judge's soft score onto a deterministically-scored
+    result. Reads judge.json only — score.py itself never calls an LLM."""
+    judge_path = workdir / "judge.json"
+    if not judge_path.exists():
+        raise FileNotFoundError(
+            f"soft_source 'judge' but {judge_path} is missing; run judge.py first")
+    judged = json.loads(judge_path.read_text(encoding="utf-8"))
+    sha = hashlib.sha256(output.encode("utf-8")).hexdigest()
+    if judged.get("output_sha256") != sha:
+        raise ValueError(f"{judge_path} is stale (output.txt changed); re-run judge.py")
+    return dict(result,
+                soft=round(float(judged["soft"]), 4),
+                soft_source="judge",
+                checks=list(result["checks"]) + [
+                    f"judge:{cid}:{int(v)}"
+                    for cid, v in sorted(judged["criteria"].items())])
+
+
+def _deterministic_score(task: dict, workdir: Path, mode: str, config: dict, rubric) -> dict:
     scoring = dict(task.get("scoring") or {})
     scoring.setdefault("mode", config.get("default_mode", "checklist"))
     output_path = workdir / "output.txt"
@@ -99,6 +121,17 @@ def score_task(task: dict, workdir: Path, mode: str, config: dict, rubric) -> di
                 "checks": list(result.get("checks", [])), "mode": smode}
 
     raise ValueError(f"unknown scoring mode {smode!r}")
+
+
+def score_task(task: dict, workdir: Path, mode: str, config: dict, rubric) -> dict:
+    scoring = dict(task.get("scoring") or {})
+    result = _deterministic_score(task, workdir, mode, config, rubric)
+    if (scoring.get("soft_source", config.get("soft_source")) == "judge"
+            and "output_empty" not in result["checks"]):
+        output_path = workdir / "output.txt"
+        output = output_path.read_text(encoding="utf-8") if output_path.exists() else ""
+        result = apply_judge_soft(result, workdir, output)
+    return result
 
 
 def aggregate(results: dict[str, dict], suites: dict[str, str], weight: float) -> dict:
