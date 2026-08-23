@@ -139,9 +139,6 @@ and post-run leakage audits.
   accept/reject, `results.tsv`, never-stop autonomy.
 - **Loopy** — loop-design rules: signal vs gate separation, explicit
   terminal states, run receipts, no self-approval.
-- **SkillOpt** — optimizer mechanics: mixed validation gate, edit budgets,
-  ranking, autonomous learning rate, rejected-edit buffer, protected
-  sections, meta-memory, harvesting.
 - **skill-review** — the skill-quality standard enforced by
   `harness/lint_skill.py` and the editor prompts.
 
