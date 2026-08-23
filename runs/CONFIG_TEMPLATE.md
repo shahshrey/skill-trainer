@@ -35,3 +35,10 @@ nohup ./train.sh <skill> <tag> <agent-cli> <manager-model> <rollout-model> [effo
 Pre-flight (every launch): branch `train/<skill>/<tag>` created and checked
 out; `run_task.py --smoke` passes; no other train.sh running (`pgrep`);
 suite build calibrates (`tasks/<suite>/build_suite.py` exit 0).
+
+Judge-scored suites: raise `min_delta` slightly (residual judge variance
+inflates run-to-run spread; the baseline spread/3 formula will set it too
+low). Pin `SKILL_TRAINER_JUDGE_MODEL` and `SKILL_TRAINER_JUDGE_EFFORT` for
+the entire run — changing the judge model mid-run invalidates gate
+comparisons (same rule as scores never comparing across modes). Set them
+before launching train.sh and leave them fixed.

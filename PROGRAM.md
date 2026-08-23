@@ -358,6 +358,15 @@ concurrency cap, each in its own workspace
    --batch runs/<tag>/step_<n>/<mode> --mode <mode>`. Empty or garbled
    score output = crash: log `crash`, reset the candidate, move on. A
    fixable stupidity (typo-level) gets exactly one retry.
+   Judged suites (scoring.md declares `soft_source: "judge"`, or tasks do):
+   `rollout_batch.py --score` runs `harness/judge.py --batch` automatically
+   before `score.py` (judge backend: scoring.md `judge_backend`, else the
+   rollout backend; judge model via `SKILL_TRAINER_JUDGE_MODEL`). When
+   scoring manually, run judge.py first — score.py exits 2 on a missing or
+   stale judge.json. `judge.json` files are workspace artifacts: val-task
+   verdicts are val contents and must NEVER be surfaced to the editor.
+   You may not enable, disable, or reconfigure judging — the suite config
+   is the only switch, set by the human at suite-setup time.
 4. Gate per §4f (paired preferred). `n_val_rollouts` = K × |val|.
 5. **Rate-limit contamination.** The dispatcher detects limit-window
    rollouts (tiny output mentioning a limit), retries them itself with

@@ -148,7 +148,8 @@ tasks/<skill-name>/
   val.jsonl          held-out gate tasks; the editor NEVER sees these
   test.jsonl         optional final held-out set
   scoring.md         scoring contract: suite config (first fenced json
-                     block), smoke_tools, example-template packaging rules
+                     block), smoke_tools, example-template packaging rules;
+                     judge keys: soft_source, judge_samples, judge_backend
   rubric.py          score(task, workdir, mode) -> {hard, soft, checks}
                      (only needed for rubric-mode scoring)
   requirements.txt   suite-specific deps (installed into .venv)
@@ -158,8 +159,25 @@ tasks/<skill-name>/
 Each line of a `.jsonl` file is a task: `{"id": ..., "prompt": ...,
 "files": [...], "scoring": {...}}`. Four scoring modes are built in:
 `exact` (regex on output), `checklist` (required substrings), `command`
-(exit code), and `rubric` (your `rubric.py`). Scoring is deterministic and
-makes no LLM calls.
+(exit code), and `rubric` (your `rubric.py`). Scoring itself is
+deterministic and makes no LLM calls. For skills whose quality can't be
+checked mechanically, a suite can opt in to **judge scoring**:
+`"soft_source": "judge"` plus binary criteria in the task's scoring block,
+and `harness/judge.py` (run automatically by `rollout_batch.py --score`)
+asks your agent CLI to grade each output against those criteria — N samples,
+majority vote, cached by output hash, written to `judge.json` for `score.py`
+to read. The `hard` score always stays programmatic.
+
+**Choosing your scoring:** if success is mechanically verifiable (a string
+appears, a file exists, a command exits 0), use the programmatic modes —
+free, deterministic, unhackable. If success is inherently a quality judgment
+(tone, coherence, "followed the spirit of the workflow"), programmatic checks
+can't measure it: use judge scoring for `soft` and keep the strongest
+programmatic check you have for `hard`. If an agent is helping you set up a
+suite, it should put this choice to you explicitly — never pick silently.
+`run_task.py --smoke` warns about tasks with weak deterministic signal.
+Judge-scored suites should set a slightly larger `min_delta` in `config.json`
+to absorb residual judge variance.
 
 The skill being trained lives at `skills/<skill-name>/SKILL.md`, with
 optimizer memory in `META.md` beside it.
