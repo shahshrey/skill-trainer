@@ -1,78 +1,117 @@
+<p align="center">
+  <img src="docs/banner.png" width="900px" alt="skill-trainer — stop writing skills, start training them">
+</p>
+
+<div align="center">
+
 # skill-trainer
 
-**Stop writing skills. Start training them.**
+**Your agent's `SKILL.md` is a guess. Train it until it's a measurement.**
 
-A standalone, self-contained system that *trains* an agent skill — a
-`SKILL.md` document — against a scored task suite, using an agent-driven
-hill-climbing loop with git as the checkpoint mechanism.
+An agent-driven hill-climbing loop that trains skill files against scored
+task suites — git is the checkpoint mechanism, markdown is the model, and
+every accepted edit earned its place on a held-out validation set.
+
+[![tests](https://github.com/shahshrey/skill-trainer/actions/workflows/tests.yml/badge.svg)](https://github.com/shahshrey/skill-trainer/actions/workflows/tests.yml)
+[![python](https://img.shields.io/badge/python-3.11+-blue)](https://www.python.org)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
+
+**[Run it now](#-run-it-now)** · **[How it works](#-how-it-works)** · **[Bring your own task](#-bring-your-own-task-suite)** · **[Launch a training run](#-launch-a-real-training-run)**
+
+</div>
+
+---
+
+Skills today are written once, by feel, and never verified. skill-trainer
+closes the loop: propose a small edit, run the candidate against tasks the
+editor never saw, keep it only if the score strictly improves. Rejected
+edits roll back with `git reset --hard` — and get fed to future editors as
+evidence of what didn't work.
 
 Zero framework dependencies. The harness is plain Python (stdlib + numpy);
 the optimizer is a manager agent following [`PROGRAM.md`](PROGRAM.md);
-everything that "learns" is markdown. Requires only git, Python 3.11+, and
-one or more agent CLIs (`claude -p`, `codex exec`, `cursor-agent`,
-`copilot`).
+everything that "learns" is markdown. Works with `claude -p`, `codex exec`,
+`cursor-agent`, and `copilot`.
 
-## How it works
+## 🚀 Run it now
 
-1. An **editor** agent proposes a small set of bounded edits to `SKILL.md`
-   based on failure/success evidence from training tasks.
-2. The manager applies the edits, runs `harness/lint_skill.py` (a
-   deterministic skill-quality gate), and commits.
-3. Parallel **rollout workers** run the candidate skill against a held-out
-   validation set the editor never saw; `harness/score.py` produces a number.
-4. Strictly better → the branch advances. Otherwise → `git reset --hard`.
-5. Every step is logged to `results.tsv` (including rejected edit text — a
-   rejected-edit buffer fed back to future editors).
-6. Every E steps, an epoch boundary runs a slow-update regression check and
-   refreshes the optimizer-side memory (`META.md`).
-
-Training runs happen on branches named `train/<skill-name>/<tag>`, and the
-manager survives crashes: `train.sh` relaunches it until a terminal state
-exists, and the resume ritual in `PROGRAM.md` §0 reconstructs everything
-from disk.
-
-Guardrails are structural, not aspirational: the editor never sees
-validation tasks, the manager cannot modify the harness or the task suite,
-scores never compare across gate modes, and post-run audits
-(`harness/audit_run.py`) grep for leakage.
-
-## Quick start
+Prove the trainer to yourself in one minute — deterministic, no LLM calls,
+no API key:
 
 ```bash
 git clone https://github.com/shahshrey/skill-trainer
 cd skill-trainer
 uv venv .venv && uv pip install -r requirements-dev.txt -p .venv/bin/python
-
-# The trainer tests itself deterministically — no LLM calls:
-.venv/bin/python -m pytest tests/
+.venv/bin/python -m pytest tests/        # 123 tests: gates, edits, lint, audits
 ```
 
-To train something real you bring a **task suite** (see below). The mock
-backend lets you exercise the whole loop without an agent CLI or API costs
-first:
+Then watch it actually train. The meta-eval deletes a known-good rule from
+a reference skill and measures whether the loop can rediscover it from
+failure symptoms alone (editor runs on your `claude` CLI; rollouts are
+mocked, so it's cheap):
 
 ```bash
-# Meta-evaluation: can the trainer recover a deliberately deleted rule?
-.venv/bin/python tests/meta_eval.py planted --ablate <rule-id>
-# Null test: does it correctly reject noise?
-.venv/bin/python tests/meta_eval.py null
-# Full machinery: epochs, slow updates, audits
-.venv/bin/python tests/meta_eval.py epochs
+.venv/bin/python tests/meta_eval.py planted --ablate seamless-loop --max-steps 8
 ```
 
-## Bring your own task suite
+And the null test — the one most optimizers fail — checks that on a
+pure-noise suite the trainer correctly accepts ~nothing:
+
+```bash
+.venv/bin/python tests/meta_eval.py null --max-steps 5
+```
+
+## ⚙️ How it works
+
+```mermaid
+flowchart LR
+    A["✏️ Editor agent<br/>proposes ≤L bounded edits<br/>from train-task evidence"] --> B["🚧 lint_skill.py<br/>deterministic quality gate"]
+    B --> C["📌 git commit<br/>candidate skill"]
+    C --> D["🎲 Parallel rollout workers<br/>held-out val tasks<br/>(never seen by the editor)"]
+    D --> E["🧮 score.py<br/>hard / soft / mixed"]
+    E -->|"strictly better"| F["✅ keep<br/>branch advances,<br/>best tag moves"]
+    E -->|"not better"| G["❌ git reset --hard<br/>edit → rejected buffer"]
+    F --> A
+    G --> A
+```
+
+1. An **editor** agent proposes a small set of bounded edits to `SKILL.md`,
+   grounded in failure/success evidence from training tasks.
+2. The manager applies them, runs the **lint gate**, and commits the
+   candidate.
+3. Parallel **rollout workers** run the candidate against a held-out
+   validation set; `score.py` turns the outputs into a number —
+   deterministically, with no LLM judging.
+4. Strictly better → the branch advances. Otherwise → `git reset --hard`,
+   and the rejected edit text goes into a buffer future editors read.
+5. Every step lands in `results.tsv`. Every E steps, an epoch boundary runs
+   a slow-update regression check and refreshes the optimizer's own memory
+   (`META.md`).
+
+The manager is expected to die (context exhaustion, sleep, API errors) —
+`train.sh` relaunches it until a terminal state exists, and the resume
+ritual in `PROGRAM.md` §0 reconstructs everything from disk. Training runs
+live on branches named `train/<skill-name>/<tag>`.
+
+**Guardrails are structural, not aspirational:** the editor never sees val
+tasks, the manager cannot modify the harness or the task suite, scores
+never compare across gate modes, and post-run audits
+(`harness/audit_run.py`) grep for leakage.
+
+## 🧩 Bring your own task suite
 
 This repo is the **framework only** (see `PROGRAM.md` §8). Task suites and
-the skills they train live in your own working copy — `tasks/` and
-`skills/` are gitignored here by design. A suite is a directory:
+the skills they train live in your working copy — `tasks/` and `skills/`
+are gitignored here by design. A suite is a directory:
 
 ```
 tasks/<skill-name>/
   train.jsonl        tasks the editor learns from
   val.jsonl          held-out gate tasks — the editor NEVER sees these
   test.jsonl         optional final held-out set
-  scoring.md         scoring contract: suite config (first ```json block),
-                     smoke_tools, optional example-template packaging rules
+  scoring.md         scoring contract: suite config (first fenced json
+                     block), smoke_tools, example-template packaging rules
   rubric.py          score(task, workdir, mode) -> {hard, soft, checks}
                      (only needed for rubric-mode scoring)
   requirements.txt   suite-specific deps (installed into .venv)
@@ -88,13 +127,13 @@ makes no LLM calls.
 The skill being trained lives at `skills/<skill-name>/SKILL.md`, with
 optimizer memory in `META.md` beside it.
 
-## Launching a training run
+## 🏃 Launch a real training run
 
 ```bash
 # One-time: verify tooling against your suite
 .venv/bin/python harness/run_task.py --smoke --suite tasks/<skill> --backend claude
 
-# Launch (keeps the manager alive until a terminal state):
+# Launch — keeps the manager alive until a terminal state:
 ./train.sh <skill-name> <tag> claude
 ```
 
@@ -103,7 +142,7 @@ Before a real run, copy `runs/CONFIG_TEMPLATE.md`'s JSON into
 live run. The manager reads `PROGRAM.md` and takes it from there; it will
 not stop until `runs/<tag>/TERMINAL` exists.
 
-## Layout
+## 📂 Layout
 
 ```
 PROGRAM.md            manager agent instructions (the heart)
@@ -127,12 +166,18 @@ killed and requeued once). `harness/harvest.py` mines Claude/Codex/Cursor
 session transcripts for recurring requests to grow task suites from
 (≥2 distinct sessions before a candidate is emitted; a human curates).
 
-## Meta-evaluation
+## 🤝 Contributing
 
-The trainer itself is tested (see `tests/`): deterministic gate/edit/lint
-tests against a mock backend, planted-defect recovery, a null (noise) test,
-and post-run leakage audits.
+Harness improvements, new scoring modes, new agent backends, and doc fixes
+are all welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). The one rule:
+`tests/` must stay deterministic and LLM-free.
 
-## License
+---
 
-[MIT](LICENSE)
+<div align="center">
+
+⭐ **[Star the repo](https://github.com/shahshrey/skill-trainer/stargazers)** if you'd rather measure skills than guess at them.
+
+<sub>MIT · See <a href="LICENSE">LICENSE</a></sub>
+
+</div>
