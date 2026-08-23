@@ -1,0 +1,18 @@
+# Framework/task boundary (PROGRAM.md §8): task suites and trainable skills
+# live in your own task repo, not here.
+tasks/
+skills/
+
+# Per-run artifacts and training logs
+runs/*
+!runs/CONFIG_TEMPLATE.md
+results.tsv
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# macOS
+.DS_Store
