@@ -12,6 +12,9 @@ An agent-driven hill-climbing loop that trains skill files against scored
 task suites. Git is the checkpoint mechanism, markdown is the model, and
 every accepted edit earned its place on a held-out validation set.
 
+Works with **Claude Code**, **Codex**, **GitHub Copilot**, and **Cursor** —
+your coding agent is the editor, the rollout worker, and the manager.
+
 [![tests](https://github.com/shahshrey/skill-trainer/actions/workflows/tests.yml/badge.svg)](https://github.com/shahshrey/skill-trainer/actions/workflows/tests.yml)
 [![python](https://img.shields.io/badge/python-3.11+-blue)](https://www.python.org)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -31,13 +34,15 @@ evidence of what didn't work.
 
 Zero framework dependencies. The harness is plain Python (stdlib + numpy),
 the optimizer is a manager agent following [`PROGRAM.md`](PROGRAM.md), and
-everything that "learns" is markdown. Works with `claude -p`, `codex exec`,
-`cursor-agent`, and `copilot`.
+everything that "learns" is markdown. All model work goes through the agent
+CLI you already have — `claude -p`, `codex exec`, `copilot`, or
+`cursor-agent` — so training runs on the same models and subscription your
+coding agent uses.
 
 ## Run it now
 
-Prove the trainer to yourself in one minute. Deterministic, no LLM calls,
-no API key:
+Start with the framework's own test suite — the one part of skill-trainer
+that uses no models at all (deterministic, mock backend):
 
 ```bash
 git clone https://github.com/shahshrey/skill-trainer
@@ -46,10 +51,11 @@ uv venv .venv && uv pip install -r requirements-dev.txt -p .venv/bin/python
 .venv/bin/python -m pytest tests/        # 123 tests: gates, edits, lint, audits
 ```
 
-Then watch it actually train. The meta-eval deletes a known-good rule from
+Then watch it actually train — from here on, real models are doing the
+work through your agent CLI. The meta-eval deletes a known-good rule from
 a reference skill and measures whether the loop can rediscover it from
-failure symptoms alone. The editor runs on your `claude` CLI; rollouts are
-mocked, so it's cheap:
+failure symptoms alone. The editor runs on Claude Code (`claude -p`);
+rollouts are mocked, so it's cheap:
 
 ```bash
 .venv/bin/python tests/meta_eval.py planted --ablate seamless-loop --max-steps 8
@@ -134,7 +140,8 @@ optimizer memory in `META.md` beside it.
 # One-time: verify tooling against your suite
 .venv/bin/python harness/run_task.py --smoke --suite tasks/<skill> --backend claude
 
-# Launch; keeps the manager alive until a terminal state
+# Launch; keeps the manager alive until a terminal state.
+# The third argument picks the agent: claude | codex | copilot | cursor-agent
 ./train.sh <skill-name> <tag> claude
 ```
 
