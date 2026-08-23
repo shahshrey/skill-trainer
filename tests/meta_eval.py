@@ -254,6 +254,15 @@ def make_worktree(name: str) -> Path:
     sh(["git", "branch", "-qD", f"meta/{name}"], REPO)
     r = sh(["git", "worktree", "add", "-b", f"meta/{name}", str(wt), "HEAD"], REPO)
     assert r.returncode == 0, r.stderr
+    # Seed the bundled example suite: tasks/ and skills/ are gitignored
+    # (PROGRAM.md §8), so a HEAD checkout has neither. Force-add so the
+    # loop's `git commit -qam` / `git reset --hard` see them as tracked.
+    example = REPO / "examples" / "mock-demo"
+    if not (wt / "tasks" / "mock-demo").exists():
+        shutil.copytree(example / "tasks", wt / "tasks", dirs_exist_ok=True)
+        shutil.copytree(example / "skills", wt / "skills", dirs_exist_ok=True)
+        sh(["git", "add", "-f", "tasks", "skills"], wt)
+        sh(["git", "commit", "-qm", "seed example suite from examples/mock-demo"], wt)
     return wt
 
 

@@ -18,9 +18,8 @@ coding agent is the editor, the rollout worker, and the manager.
 [![tests](https://github.com/shahshrey/skill-trainer/actions/workflows/tests.yml/badge.svg)](https://github.com/shahshrey/skill-trainer/actions/workflows/tests.yml)
 [![python](https://img.shields.io/badge/python-3.11+-blue)](https://www.python.org)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
-**[Run it now](#run-it-now)** · **[How it works](#how-it-works)** · **[Bring your own task](#bring-your-own-task-suite)** · **[Launch a training run](#launch-a-real-training-run)**
+**[Run it now](#run-it-now)** · **[How it works](#how-it-works)** · **[What a run produces](#what-a-run-produces)** · **[Bring your own task](#bring-your-own-task-suite)** · **[Launch a training run](#launch-a-real-training-run)**
 
 </div>
 
@@ -35,27 +34,41 @@ evidence of what didn't work.
 Zero framework dependencies. The harness is plain Python (stdlib + numpy),
 the optimizer is a manager agent following [`PROGRAM.md`](PROGRAM.md), and
 everything that "learns" is markdown. All model work goes through the agent
-CLI you already have: `claude -p`, `codex exec`, `copilot`, `cursor-agent`,
-or `opencode run`. Training runs on the same models and subscription your
-coding agent uses.
+CLI you already have — no API keys beyond the CLIs themselves, billed on
+the same models and subscription your coding agent already uses.
+
+## Prerequisites
+
+- Python 3.11+ and git.
+- At least one agent CLI installed and authenticated: `claude`, `codex`,
+  `copilot`, `cursor-agent`, or `opencode`.
+- Any platform with bash. On macOS, `train.sh` additionally blocks system
+  sleep (via `caffeinate`) so overnight runs survive; elsewhere it runs
+  unwrapped.
 
 ## Run it now
 
-Start with the framework's own test suite, the one part of skill-trainer
-that uses no models at all (deterministic, mock backend):
+Start with the framework's own test suite — deterministic, mock backend,
+no model calls:
 
 ```bash
 git clone https://github.com/shahshrey/skill-trainer
 cd skill-trainer
+
+# with uv:
 uv venv .venv && uv pip install -r requirements-dev.txt -p .venv/bin/python
-.venv/bin/python -m pytest tests/        # 123 tests: gates, edits, lint, audits
+# or with plain pip:
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+
+.venv/bin/python -m pytest tests/
 ```
 
-Then watch it actually train. From here on, real models do the work
-through your agent CLI. The meta-eval deletes a known-good rule from
-a reference skill and measures whether the loop can rediscover it from
-failure symptoms alone. The editor runs on Claude Code (`claude -p`);
-rollouts are mocked, so it's cheap:
+Then watch it actually train, using the bundled example suite
+([`examples/mock-demo`](examples/mock-demo)). The meta-eval deletes a
+known-good rule from the reference skill and measures whether the loop can
+rediscover it from failure symptoms alone. Rollouts stay mocked; only the
+editor makes model calls (through `claude -p`), so it costs a handful of
+prompts:
 
 ```bash
 .venv/bin/python tests/meta_eval.py planted --ablate seamless-loop --max-steps 8
@@ -98,11 +111,36 @@ tasks, the manager cannot modify the harness or the task suite, scores
 never compare across gate modes, and post-run audits
 (`harness/audit_run.py`) grep for leakage.
 
+## What a run produces
+
+- **The trained skill**, at `skills/<skill-name>/SKILL.md` on the
+  `train/<skill-name>/<tag>` branch. Best checkpoints are git-tagged; every
+  accepted step is a commit you can diff to see exactly what the training
+  changed and why.
+- **`results.tsv`** — one append-only row per step: commit, epoch, step,
+  gate mode, val scores (mixed/hard/soft), rollout count, keep/discard
+  status, and a one-line description of the edits tried.
+- **`runs/<tag>/`** — per-step artifacts: rollout workspaces, editor
+  transcripts, score reports, and finally `TERMINAL`, a one-line
+  `<state>: <reason>` file (`success`, `no-progress`, `blocked`, ...)
+  that is the only way a run ends.
+
+### What it costs
+
+The test suite and all mock rollouts are free — no model calls at all. The
+meta-eval makes a few editor calls per step through `claude -p`. A real
+training run is the expensive mode: each step is roughly one editor call
+plus K × |val| rollouts through your agent CLI, so an overnight run means
+hundreds of rollouts on your existing subscription. Size K, the val set,
+and `--max-steps` accordingly; there is no separate API bill.
+
 ## Bring your own task suite
 
 This repo is the framework only (see `PROGRAM.md` §8). Task suites and
 the skills they train live in your working copy; `tasks/` and `skills/`
-are gitignored here by design. A suite is a directory:
+are gitignored here by design. The bundled
+[`examples/mock-demo`](examples/mock-demo) is a complete working suite to
+copy as a starting point. A suite is a directory:
 
 ```
 tasks/<skill-name>/
@@ -141,9 +179,9 @@ optimizer memory in `META.md` beside it.
 ```
 
 Before a real run, copy `runs/CONFIG_TEMPLATE.md`'s JSON into
-`runs/<tag>/config.json`. Every field pattern in it earned its place in a
-live run. The manager reads `PROGRAM.md` and takes it from there; it will
-not stop until `runs/<tag>/TERMINAL` exists.
+`runs/<tag>/config.json` and adjust it for your suite. The manager reads
+`PROGRAM.md` and takes it from there; it will not stop until
+`runs/<tag>/TERMINAL` exists.
 
 ## Layout
 
@@ -152,7 +190,8 @@ PROGRAM.md            manager agent instructions; the whole loop is here
 train.sh              relaunch wrapper; keeps the manager alive
 prompts/              worker prompt templates (editor, ranker, rollout, ...)
 harness/              the ONLY Python code; read-only during training
-runs/CONFIG_TEMPLATE.md  canonical run config, distilled from live runs
+examples/mock-demo/   complete example suite; template + meta-eval fixture
+runs/CONFIG_TEMPLATE.md  canonical run config
 tests/                deterministic framework tests + meta_eval.py
 tasks/<name>/         your task suites (gitignored; yours to provide)
 skills/<name>/        SKILL.md (trainable) + META.md (optimizer memory)
@@ -165,10 +204,7 @@ modify them, and the editor must never see val task contents.
 
 Rollout batches go through `harness/rollout_batch.py`: N parallel
 private-workspace workers with heartbeat supervision (the dispatcher kills
-a stale worker and requeues it once). `harness/harvest.py` mines
-Claude/Codex/Cursor session transcripts for recurring requests to grow
-task suites from (≥2 distinct sessions before a candidate is emitted; a
-human curates).
+a stale worker and requeues it once).
 
 ## Contributing
 
@@ -179,9 +215,5 @@ are all welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). The one rule:
 ---
 
 <div align="center">
-
-**[Star the repo](https://github.com/shahshrey/skill-trainer/stargazers)** if you'd rather measure skills than guess at them.
-
 <sub>MIT · See <a href="LICENSE">LICENSE</a></sub>
-
 </div>
