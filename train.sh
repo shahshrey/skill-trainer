@@ -19,20 +19,25 @@ Follow PROGRAM.md exactly, starting with its Resume ritual (§0).
 
 $(cat PROGRAM.md)"
 
+# Block system sleep so unattended runs survive the night: caffeinate on
+# macOS; on other platforms the manager just runs unwrapped.
+keepawake() {
+  if command -v caffeinate >/dev/null 2>&1; then caffeinate -dims "$@"; else "$@"; fi
+}
+
 while [ ! -f "runs/$TAG/TERMINAL" ]; do
   echo "[train.sh] $(date '+%F %T') launching manager ($AGENT) for run $TAG"
-  # caffeinate: an unattended run must survive the night, so block system sleep
   case "$AGENT" in
-    claude)  caffeinate -dims claude -p "$PROMPT" --dangerously-skip-permissions ${MODEL:+--model "$MODEL"} || true ;;
-    codex)   caffeinate -dims codex exec --sandbox workspace-write \
+    claude)  keepawake claude -p "$PROMPT" --dangerously-skip-permissions ${MODEL:+--model "$MODEL"} || true ;;
+    codex)   keepawake codex exec --sandbox workspace-write \
                ${MODEL:+--model "$MODEL"} \
                ${EFFORT:+-c "model_reasoning_effort=$EFFORT"} -- "$PROMPT" || true ;;
-    copilot) caffeinate -dims copilot -p "$PROMPT" --allow-all-tools --no-color \
+    copilot) keepawake copilot -p "$PROMPT" --allow-all-tools --no-color \
                ${MODEL:+--model "$MODEL"} ${EFFORT:+--effort "$EFFORT"} || true ;;
     # cursor model ids bake in reasoning effort (…-high), so no effort flag
-    cursor|cursor-agent) caffeinate -dims cursor-agent -p --force --trust \
+    cursor|cursor-agent) keepawake cursor-agent -p --force --trust \
                ${MODEL:+--model "$MODEL"} -- "$PROMPT" || true ;;
-    opencode) caffeinate -dims opencode run --auto \
+    opencode) keepawake opencode run --auto \
                ${MODEL:+--model "$MODEL"} ${EFFORT:+--variant "$EFFORT"} -- "$PROMPT" || true ;;
     *)       "$AGENT" -p "$PROMPT" || true ;;
   esac
