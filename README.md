@@ -133,15 +133,6 @@ The trainer itself is tested (see `tests/`): deterministic gate/edit/lint
 tests against a mock backend, planted-defect recovery, a null (noise) test,
 and post-run leakage audits.
 
-## Design provenance (ideas, not code)
-
-- **autoresearch** (Karpathy) — outer loop mechanics: commit/reset as
-  accept/reject, `results.tsv`, never-stop autonomy.
-- **Loopy** — loop-design rules: signal vs gate separation, explicit
-  terminal states, run receipts, no self-approval.
-- **skill-review** — the skill-quality standard enforced by
-  `harness/lint_skill.py` and the editor prompts.
-
 ## License
 
 [MIT](LICENSE)

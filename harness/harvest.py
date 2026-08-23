@@ -12,7 +12,7 @@ Reads (read-only, no network):
 
 Groups near-duplicate user requests (token-set Jaccard >= 0.55 after
 stopword removal) and emits one candidate per group that recurs in >= 2
-distinct sessions (Loopy's recurrence rule; --min-occurrences raises it).
+distinct sessions (--min-occurrences raises it).
 Each candidate carries the representative prompt, occurrence counts, an
 observed-outcome guess (the next user message in-session matched against
 positive/negative feedback phrases), and file#line source refs. A human

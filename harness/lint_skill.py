@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Deterministic skill-quality gate.
 
-Implements the machine-checkable subset of the skill-review checklist
+Implements the machine-checkable subset of the skill-quality checklist
 (the qualitative remainder is prompts/skill_reviewer.md's job). Pure
 stdlib, no LLM calls.
 
