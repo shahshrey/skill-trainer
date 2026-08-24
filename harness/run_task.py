@@ -197,26 +197,33 @@ def run_agent(backend: str, prompt: str, skill_text: str, extra: list[str],
     return code, time.monotonic() - start
 
 
+def suite_scoring_config(suite: Path) -> dict:
+    """Parsed fenced-json config from the suite's scoring.md (empty dict on any failure)."""
+    scoring_md = suite / "scoring.md"
+    if not scoring_md.exists():
+        return {}
+    m = re.search(r"```json\s*\n([\s\S]*?)\n```", scoring_md.read_text(encoding="utf-8"))
+    if not m:
+        return {}
+    try:
+        result = json.loads(m.group(1))
+        return result if isinstance(result, dict) else {}
+    except (json.JSONDecodeError, AttributeError):
+        return {}
+
+
 def suite_smoke_tools(suite: Path) -> list[str]:
     """Binaries the suite declares in scoring.md's fenced json config
     (`smoke_tools`). The suite owns its tooling needs; the harness
     hardcodes none (an unconditional ffmpeg check once blocked non-media
     suites on machines without it)."""
-    scoring_md = suite / "scoring.md"
-    if not scoring_md.exists():
-        return []
-    m = re.search(r"```json\s*\n([\s\S]*?)\n```", scoring_md.read_text(encoding="utf-8"))
-    if not m:
-        return []
-    try:
-        return list(json.loads(m.group(1)).get("smoke_tools", []))
-    except (json.JSONDecodeError, AttributeError):
-        return []
+    return list(suite_scoring_config(suite).get("smoke_tools", []))
 
 
 def smoke(suite: Path | None, backend: str | None) -> int:
     checks: list[tuple[str, bool, str]] = []
     have_playwright = False
+    warnings: list[str] = []
     if suite is not None:
         req = suite / "requirements.txt"
         if req.exists():
@@ -233,6 +240,48 @@ def smoke(suite: Path | None, backend: str | None) -> int:
                     checks.append((f"dep:{name}", False, str(exc)))
         for tool in suite_smoke_tools(suite):
             checks.append((f"tool:{tool}", shutil.which(tool) is not None, "not on PATH"))
+        config = suite_scoring_config(suite)
+        tasks = []
+        for split in ("train", "val", "test"):
+            path = suite / f"{split}.jsonl"
+            if path.exists():
+                tasks += [json.loads(ln) for ln in
+                          path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        # Inline judge resolution: judge.py imports this module, so smoke
+        # must not import judge.py back (circular import).
+        def judged(task):
+            scoring = task.get("scoring") or {}
+            return scoring.get("soft_source", config.get("soft_source", "self")) == "judge"
+
+        judged_tasks = [t for t in tasks if judged(t)]
+        if judged_tasks:
+            prompt_path = Path(__file__).resolve().parent.parent / "prompts" / "judge.md"
+            checks.append(("judge:prompt", prompt_path.exists(), "prompts/judge.md missing"))
+            for t in judged_tasks:
+                criteria = (((t.get("scoring") or {}).get("judge") or {})
+                            .get("criteria") or [])
+                ok_crit = bool(criteria) and all(c.get("id") and c.get("desc")
+                                                 for c in criteria)
+                checks.append((f"judge:criteria:{t.get('id')}", ok_crit,
+                               "scoring.judge.criteria must be [{id, desc}, ...]"))
+            judge_backend = config.get("judge_backend") or backend
+            if judge_backend and judge_backend != "mock":
+                binary = BACKEND_BINARIES[judge_backend]
+                checks.append((f"judge:cli:{binary}",
+                               shutil.which(binary) is not None, "not on PATH"))
+        else:
+            # Surface the scoring choice; never auto-enable (design decision:
+            # the user picks programmatic vs judge at suite-setup time).
+            weak = {"checklist": "required", "exact": "expected", "command": "command"}
+            for t in tasks:
+                scoring = t.get("scoring") or {}
+                mode = scoring.get("mode", config.get("default_mode", "checklist"))
+                key = weak.get(mode)
+                if key and not scoring.get(key):
+                    warnings.append(
+                        f"task {t.get('id')}: mode '{mode}' has no {key!r}; if "
+                        "success here is a quality judgment, consider judge "
+                        "scoring (soft_source: 'judge' + judge criteria)")
     if have_playwright:
         try:
             from playwright.sync_api import sync_playwright
@@ -249,6 +298,7 @@ def smoke(suite: Path | None, backend: str | None) -> int:
     print(json.dumps({
         "smoke": "pass" if ok else "fail",
         "checks": [{"check": c, "ok": p, **({"detail": d} if not p else {})} for c, p, d in checks],
+        "warnings": warnings,
     }, indent=2))
     return 0 if ok else 1
 

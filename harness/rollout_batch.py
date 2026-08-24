@@ -35,6 +35,8 @@ import time
 from collections import deque
 from pathlib import Path
 
+from score import suite_config  # same-directory import; see judge.py
+
 HARNESS = Path(__file__).resolve().parent
 
 
@@ -296,6 +298,20 @@ def main() -> None:
         print(json.dumps(summary, indent=2))
         sys.exit(3)
     if args.score and not crashed:
+        cfg = suite_config(Path(args.suite))
+        # Mock batches must never invoke a real judge CLI; otherwise the
+        # suite's judge_backend wins, falling back to the rollout backend.
+        judge_backend = ("mock" if args.backend == "mock"
+                         else (cfg.get("judge_backend") or args.backend))
+        jr = subprocess.run(
+            [sys.executable, str(HARNESS / "judge.py"), "--suite", args.suite,
+             "--batch", str(out), "--backend", judge_backend,
+             "--jobs", str(args.jobs)],
+            capture_output=True, text=True)
+        if jr.returncode != 0:
+            print(json.dumps(summary | {"judge_error": (jr.stderr or jr.stdout)[-500:]},
+                             indent=2))
+            sys.exit(2)
         r = subprocess.run(
             [sys.executable, str(HARNESS / "score.py"), "--suite", args.suite,
              "--batch", str(out), "--mode", args.mode,

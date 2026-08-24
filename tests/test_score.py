@@ -1,8 +1,11 @@
 """Scoring: per-mode correctness and batch aggregates."""
+import hashlib
 import json
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 from score import aggregate, score_task
 
@@ -116,3 +119,61 @@ def test_scoring_error_exits_2_not_zero_score(tmp_path):
         capture_output=True, text=True)
     assert proc.returncode == 2
     assert "error" in proc.stderr
+
+
+def make_judged_ws(tmp_path, name, output, judge_payload):
+    task = {"id": name, "scoring": {"mode": "checklist", "required": ["PASS"],
+                                    "soft_source": "judge",
+                                    "judge": {"criteria": [
+                                        {"id": "tone", "desc": "d"},
+                                        {"id": "complete", "desc": "d"}]}}}
+    ws = make_ws(tmp_path, name, task, output)
+    if judge_payload is not None:
+        payload = {"output_sha256": hashlib.sha256(output.encode("utf-8")).hexdigest(),
+                   "backend": "mock", "model": None, "samples": [],
+                   "flags": [], **judge_payload}
+        (ws / "judge.json").write_text(json.dumps(payload), encoding="utf-8")
+    return task, ws
+
+
+def test_soft_source_judge_reads_judge_json(tmp_path):
+    task, ws = make_judged_ws(tmp_path, "j1", "PASS output\n",
+                              {"criteria": {"tone": 1, "complete": 0}, "soft": 0.5})
+    r = score_task(task, ws, "cheap", {}, None)
+    assert r["hard"] == 1              # deterministic checklist floor
+    assert r["soft"] == 0.5            # judge-owned
+    assert r["soft_source"] == "judge"
+    assert "judge:tone:1" in r["checks"] and "judge:complete:0" in r["checks"]
+
+
+def test_soft_source_judge_missing_judge_json_raises(tmp_path):
+    task, ws = make_judged_ws(tmp_path, "j2", "PASS output\n", None)
+    with pytest.raises(FileNotFoundError):
+        score_task(task, ws, "cheap", {}, None)
+
+
+def test_soft_source_judge_stale_sha_raises(tmp_path):
+    task, ws = make_judged_ws(tmp_path, "j3", "PASS output\n",
+                              {"criteria": {"tone": 1, "complete": 1}, "soft": 1.0})
+    (ws / "output.txt").write_text("PASS but edited\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        score_task(task, ws, "cheap", {}, None)
+
+
+def test_soft_source_judge_empty_output_short_circuits(tmp_path):
+    task, ws = make_judged_ws(tmp_path, "j4", "   \n", None)
+    r = score_task(task, ws, "cheap", {}, None)      # no judge.json needed
+    assert (r["hard"], r["soft"]) == (0, 0.0)
+    assert "output_empty" in r["checks"]
+
+
+def test_suite_level_soft_source_judge(tmp_path):
+    task = {"id": "j5", "scoring": {"mode": "checklist", "required": ["PASS"],
+                                    "judge": {"criteria": [{"id": "tone", "desc": "d"}]}}}
+    output = "PASS output\n"
+    ws = make_ws(tmp_path, "j5", task, output)
+    (ws / "judge.json").write_text(json.dumps(
+        {"output_sha256": hashlib.sha256(output.encode("utf-8")).hexdigest(),
+         "criteria": {"tone": 1}, "soft": 1.0}), encoding="utf-8")
+    r = score_task(task, ws, "cheap", {"soft_source": "judge"}, None)
+    assert r["soft"] == 1.0 and r["soft_source"] == "judge"
