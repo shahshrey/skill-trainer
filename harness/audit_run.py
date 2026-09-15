@@ -51,6 +51,8 @@ def audit_leakage(run_dir: Path, suite: Path) -> list[str]:
         if not f.exists():
             continue
         for line in f.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
             task = json.loads(line)
             held_out.append((str(task["id"]), split))
             prompt = task.get("prompt") or task.get("prompt_cheap") or ""
@@ -83,8 +85,7 @@ def audit_monotone(rows: list[dict], best_tag: str | None, authoritative: str,
             by_mode[r["mode"]] = score
             if r["mode"] == authoritative:
                 last_auth_best = r["commit"]
-        if r["status"] == "epoch" and best_tag:
-            pass  # epoch rows never move the tag; verified via last_auth_best below
+    # Epoch rows never move the tag, so only keep_best commits are checked.
     if best_tag and last_auth_best:
         try:
             tag_sha = subprocess.run(["git", "-C", str(repo), "rev-parse", "--short=7", best_tag],
@@ -97,32 +98,33 @@ def audit_monotone(rows: list[dict], best_tag: str | None, authoritative: str,
     return failures
 
 
+def _protected_blocks_at(repo: Path, ref: str, rel: Path) -> str:
+    """The skill file's PROTECTED blocks as they were at a git ref."""
+    show = subprocess.run(["git", "-C", str(repo), "show", f"{ref}:{rel}"],
+                          capture_output=True, text=True)
+    return "\n".join(m.group(0) for m in PROTECTED_RE.finditer(show.stdout))
+
+
 def audit_protected(skill_path: Path, repo: Path,
                     since: str | None = None) -> list[str]:
     failures = []
     rel = skill_path.resolve().relative_to(repo.resolve())
     log = subprocess.run(["git", "-C", str(repo), "log", "--format=%h%x09%s", "--", str(rel)],
                          capture_output=True, text=True).stdout.strip().splitlines()
-    shas = [l.split("\t") for l in log if l]
+    commits = [line.split("\t") for line in log if line]  # newest first
     if since:  # audit only the run's own commits: the baseline and older are history
-        for i, (sha, _) in enumerate(shas):
+        for i, (sha, _) in enumerate(commits):
             ancestor = subprocess.run(
                 ["git", "-C", str(repo), "merge-base", "--is-ancestor", sha, since],
                 capture_output=True)
             if ancestor.returncode == 0:  # sha is at or before the baseline
-                shas = shas[:i + 1]  # keep one boundary entry; the loop exempts it
+                commits = commits[:i + 1]  # keep one boundary entry; the loop exempts it
                 break
-    for i, (sha, subject) in enumerate(shas):
-        if i == len(shas) - 1:
-            continue  # initial import / run baseline may introduce the blocks
-        parent = shas[i + 1][0]
-        diff_texts = []
-        for ref in (sha, parent):
-            show = subprocess.run(["git", "-C", str(repo), "show", f"{ref}:{rel}"],
-                                  capture_output=True, text=True)
-            diff_texts.append("\n".join(m.group(0) for m in
-                                        PROTECTED_RE.finditer(show.stdout)))
-        if diff_texts[0] != diff_texts[1] and "epoch" not in subject.lower():
+    # The oldest entry (initial import or run baseline) may introduce the
+    # blocks, so only commits that have a parent in the list are checked.
+    for (sha, subject), (parent, _) in zip(commits, commits[1:]):
+        changed = _protected_blocks_at(repo, sha, rel) != _protected_blocks_at(repo, parent, rel)
+        if changed and "epoch" not in subject.lower():
             failures.append(f"protected: non-epoch commit {sha} ({subject!r}) "
                             "modified a PROTECTED block")
     return failures

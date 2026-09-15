@@ -1,3 +1,5 @@
-# Development/test deps. Needed to run tests/, not during a training run.
--r requirements.txt
+# Development/test deps. The harness itself is stdlib-only; nothing is
+# needed during a training run. numpy: tests/test_harness_lessons.py feeds
+# diagnosis.worst_blocks real arrays.
 pytest==9.1.1
+numpy

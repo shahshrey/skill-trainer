@@ -1,5 +1,6 @@
 """Phase 3 dispatcher: N parallel rollouts, receipts persisted, heartbeat
 kills a stale worker and requeues it exactly once (PROGRAM.md §6)."""
+import argparse
 import json
 import os
 import stat
@@ -7,6 +8,8 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+from rollout_batch import Job, build_cmd
 
 HARNESS = Path(__file__).resolve().parent.parent / "harness"
 BATCH = str(HARNESS / "rollout_batch.py")
@@ -124,9 +127,6 @@ def test_stale_kill_reaps_the_whole_process_group(tmp_path):
 
 def test_stage_root_threads_through_to_run_task(tmp_path):
     """--stage-root adds --stage only for tasks that have a staging dir."""
-    import argparse
-    sys.path.insert(0, str(HARNESS))
-    from rollout_batch import Job, build_cmd
     (tmp_path / "stages" / "t00").mkdir(parents=True)
     args = argparse.Namespace(runner=None, skill="s", suite="su",
                               backend="mock", mode="cheap", timeout=5,

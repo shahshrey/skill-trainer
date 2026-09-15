@@ -89,7 +89,7 @@ def lint(skill_path: Path, deploy_mode: str = "package",
     if deploy_mode == "package":
         name = fm.get("name", "")
         desc = fm.get("description", "")
-        if not re.fullmatch(r"[a-z0-9-]{1,64}", name or ""):
+        if not re.fullmatch(r"[a-z0-9-]{1,64}", name):
             required_failures.append(f"frontmatter: name {name!r} must match [a-z0-9-], <=64 chars")
         if name and ("anthropic" in name or "claude" in name):
             required_failures.append("frontmatter: name must not contain 'anthropic' or 'claude'")
@@ -157,12 +157,14 @@ def main() -> None:
     ap.add_argument("--deploy-mode", choices=["package", "prompt"], default="package")
     ap.add_argument("--prev-skill", default=None,
                     help="pre-edit skill version for the growth guard")
-    ap.add_argument("--max-growth", type=float, default=0.20)
-    ap.add_argument("--min-growth-chars", type=int, default=900)
-    # 400 -> 900 after run sql03: the 400-char floor lint-blocked
-    # verified-correct convention edits of +417..+753 chars on a
-    # small skill (3 of 8 steps lost to the cap, not to the gate).
-    # Bloat over many steps is still bounded by the 20% relative cap.
+    ap.add_argument("--max-growth", type=float, default=0.20,
+                    help="relative growth cap on the trainable body per step")
+    ap.add_argument("--min-growth-chars", type=int, default=900,
+                    help="growth under this many chars never fails (400 -> 900 "
+                         "after run sql03: the 400-char floor lint-blocked "
+                         "verified-correct edits of +417..+753 chars on a small "
+                         "skill; bloat over many steps is still bounded by "
+                         "--max-growth)")
     args = ap.parse_args()
 
     report = lint(

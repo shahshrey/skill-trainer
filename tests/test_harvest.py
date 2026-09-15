@@ -1,5 +1,5 @@
 """harvest.py: recurring user requests across sessions become candidates;
-one-offs, meta lines, and single-session repeats do not (plan §10)."""
+one-offs, meta lines, and single-session repeats do not."""
 import json
 import subprocess
 import sys

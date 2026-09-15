@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Relaunch wrapper: keeps the manager alive until a terminal state exists.
-# Usage: ./train.sh <skill-name> <tag> [agent-cli]   (default agent: claude)
+# Usage: ./train.sh <skill-name> <tag> [agent-cli] [model] [rollout-model] [effort]
+#   agent-cli: claude (default) | codex | copilot | cursor | opencode
 set -euo pipefail
 
-SKILL="${1:?usage: ./train.sh <skill-name> <tag> [agent-cli] [model]}"
-TAG="${2:?usage: ./train.sh <skill-name> <tag> [agent-cli] [model]}"
+USAGE="usage: ./train.sh <skill-name> <tag> [agent-cli] [model] [rollout-model] [effort]"
+SKILL="${1:?$USAGE}"
+TAG="${2:?$USAGE}"
 AGENT="${3:-claude}"
 MODEL="${4:-}"                     # explicit model for the manager
 ROLLOUT_MODEL="${5:-$MODEL}"       # rollout model (defaults to manager's)

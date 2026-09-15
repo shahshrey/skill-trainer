@@ -6,7 +6,9 @@ import numpy as np
 from carryforward import harvest, stage
 from diagnosis import failure_signature, worst_blocks
 from escalation import next_plan, update_stalls
-from rollout_batch import find_orphans
+from provenance import demote, stale, stamp
+from rollout_batch import ORPHAN_MARKERS, find_orphans
+from run_task import BACKENDS
 
 
 # ---- diagnosis ------------------------------------------------------------
@@ -127,7 +129,6 @@ def test_positional_prompt_backends_are_dash_safe():
     """Injected skill text usually opens with '---' frontmatter; backends
     that take the prompt positionally must fence it behind '--' or the CLI
     parses it as an option (cursor did, 2026-08-06)."""
-    from run_task import BACKENDS
     for backend in ("cursor", "codex", "opencode"):
         cmd = BACKENDS[backend]("do the task", "---\nname: x\n---\nbody", [])
         payload = cmd[-1]
@@ -145,14 +146,12 @@ def test_cursor_orphan_marker_ignores_ide_worker_daemons():
         "  911 910 node helper",
         "  920 400 cursor-agent -p --force --trust --model m -- prompt",
     ])
-    from rollout_batch import ORPHAN_MARKERS
     assert sorted(find_orphans(ps, ORPHAN_MARKERS["cursor"])) == [910, 911]
 
 
 # ---- verdict provenance ----------------------------------------------------
 
 def test_provenance_stamp_and_stale():
-    from provenance import stamp, stale
     meta = stamp({"hard": 1}, "v5")
     assert not stale(meta, "v5")
     assert stale(meta, "v6")          # rubric upgraded: re-judge
@@ -160,7 +159,6 @@ def test_provenance_stamp_and_stale():
 
 
 def test_provenance_demote_keeps_history():
-    from provenance import demote, stamp
     meta = stamp({"hard": 1, "score": 0.9}, "v4")
     demote(meta, ["live_anim_broken"], version="v5")
     assert meta["hard"] == 0

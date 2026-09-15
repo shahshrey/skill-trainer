@@ -3,7 +3,8 @@
 
 Usage:
   rollout_batch.py --skill PATH --suite DIR --tasks id1,id2 --out DIR \
-      [--seeds 0] [--backend mock|claude|codex|cursor] [--mode cheap|full] \
+      [--seeds 0] [--backend mock|claude|codex|cursor|copilot|opencode] \
+      [--mode cheap|full] \
       [--jobs 8] [--timeout 300] [--score] [--runner CMD]
 
 One (task, seed) job per private workspace <out>/<task>_s<seed>/; workers
@@ -33,7 +34,9 @@ import subprocess
 import sys
 import time
 from collections import deque
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import IO
 
 HARNESS = Path(__file__).resolve().parent
 
@@ -97,21 +100,35 @@ def contaminated(workdir: Path) -> bool:
     return bool(CONTAM_RE.search(out.read_bytes()))
 
 
+def is_clean(workdir: Path) -> bool:
+    """A completed, uncontaminated rollout that --skip-existing may keep."""
+    result = workdir / "result.json"
+    if not result.exists() or not (workdir / "output.txt").exists():
+        return False
+    try:
+        status = json.loads(result.read_text(encoding="utf-8")).get("status")
+    except json.JSONDecodeError:
+        return False
+    return status == "done" and not contaminated(workdir)
+
+
 def limit_backoffs() -> list[float]:
     raw = os.environ.get("SKILL_TRAINER_LIMIT_BACKOFF", "300,900,2700")
     return [float(x) for x in raw.split(",") if x.strip()]
 
 
+@dataclass
 class Job:
-    def __init__(self, task: str, seed: int, workdir: Path):
-        self.task, self.seed, self.workdir = task, seed, workdir
-        self.attempts = 0
-        self.contam_attempts = 0
-        self.not_before = 0.0
-        self.proc: subprocess.Popen | None = None
-        self.log = None
-        self.started = 0.0
-        self.exit_code: int | None = None
+    task: str
+    seed: int
+    workdir: Path
+    attempts: int = 0
+    contam_attempts: int = 0
+    not_before: float = 0.0  # monotonic time before which a limit retry must wait
+    proc: subprocess.Popen | None = field(default=None, repr=False)
+    log: IO[str] | None = field(default=None, repr=False)
+    started: float = 0.0
+    exit_code: int | None = None
 
     @property
     def name(self) -> str:
@@ -126,7 +143,7 @@ def build_cmd(args: argparse.Namespace, job: Job) -> list[str]:
            "--backend", args.backend, "--mode", args.mode,
            "--seed", str(job.seed), "--timeout", str(args.timeout),
            "--workdir", str(job.workdir)]
-    if getattr(args, "stage_root", None):
+    if args.stage_root:
         stage = Path(args.stage_root) / job.task
         if stage.is_dir():  # tasks without a staging dir author from scratch
             cmd += ["--stage", str(stage)]
@@ -158,6 +175,20 @@ def kill_group(job: Job) -> None:
         pass
     job.proc.wait()
     job.log.close()
+
+
+def schedule_limit_retry(job: Job, backoffs: list[float]) -> bool:
+    """Queue a limit-contaminated job for another attempt after backoff.
+    False once the backoff ladder is exhausted."""
+    if job.contam_attempts >= len(backoffs):
+        return False
+    delay = backoffs[job.contam_attempts]
+    job.contam_attempts += 1
+    job.not_before = time.monotonic() + delay
+    job.attempts = 1  # relaunch wipes the poisoned workdir
+    print(f"limit-contaminated {job.name}; retry {job.contam_attempts}/{len(backoffs)} "
+          f"in {delay:.0f}s", file=sys.stderr, flush=True)
+    return True
 
 
 def finish(job: Job, status: str) -> None:
@@ -210,16 +241,7 @@ def main() -> None:
                 for t in args.tasks.split(",") for s in args.seeds.split(",")]
     skipped: list[Job] = []
     if args.skip_existing:
-        def is_clean(j: Job) -> bool:
-            res = j.workdir / "result.json"
-            if not res.exists() or not (j.workdir / "output.txt").exists():
-                return False
-            try:
-                status = json.loads(res.read_text()).get("status")
-            except json.JSONDecodeError:
-                return False
-            return status == "done" and not contaminated(j.workdir)
-        skipped = [j for j in all_jobs if is_clean(j)]
+        skipped = [j for j in all_jobs if is_clean(j.workdir)]
         all_jobs = [j for j in all_jobs if j not in skipped]
     queue = deque(all_jobs)
     total = len(queue) + len(skipped)
@@ -241,7 +263,6 @@ def main() -> None:
             if launch(args, job):
                 running.append(job)
             else:
-                job.exit_code = None
                 finish(job, "crashed")
                 crashed.append(job)
         time.sleep(poll)
@@ -251,22 +272,14 @@ def main() -> None:
                 running.remove(job)
                 job.log.close()
                 job.exit_code = rc
-                if contaminated(job.workdir):
-                    if job.contam_attempts < len(backoffs):
-                        delay = backoffs[job.contam_attempts]
-                        job.contam_attempts += 1
-                        job.not_before = time.monotonic() + delay
-                        job.attempts = 1  # relaunch wipes the poisoned workdir
-                        print(f"limit-contaminated {job.name}; retry "
-                              f"{job.contam_attempts}/{len(backoffs)} in "
-                              f"{delay:.0f}s", file=sys.stderr, flush=True)
-                        queue.append(job)
-                    else:
-                        finish(job, "contaminated")
-                        contam_final.append(job)
-                    continue
-                finish(job, "done")
-                completed.append(job)
+                if not contaminated(job.workdir):
+                    finish(job, "done")
+                    completed.append(job)
+                elif schedule_limit_retry(job, backoffs):
+                    queue.append(job)
+                else:
+                    finish(job, "contaminated")
+                    contam_final.append(job)
             elif time.monotonic() - job.started > stale_after:
                 running.remove(job)
                 kill_group(job)
@@ -275,7 +288,6 @@ def main() -> None:
                           file=sys.stderr, flush=True)
                     queue.append(job)
                 else:
-                    job.exit_code = None
                     finish(job, "crashed")
                     crashed.append(job)
 

@@ -73,6 +73,10 @@ def llm(prompt: str, timeout: int = 240) -> dict:
     raise RuntimeError(f"no valid JSON from LLM after retry: {last}")
 
 
+def task_ids(jsonl: Path) -> list[str]:
+    return [json.loads(line)["id"] for line in jsonl.read_text().splitlines() if line.strip()]
+
+
 class Run:
     def __init__(self, wt: Path, suite: str, k_seeds: int):
         self.wt = wt
@@ -81,10 +85,8 @@ class Run:
         self.seed_counter = 0
         self.tsv: list[str] = []
         self.skill = wt / "skills" / "mock-demo" / "SKILL.md"
-        self.val_ids = [json.loads(l)["id"] for l in
-                        (wt / "tasks" / suite / "val.jsonl").read_text().splitlines()]
-        self.train_ids = [json.loads(l)["id"] for l in
-                          (wt / "tasks" / suite / "train.jsonl").read_text().splitlines()]
+        self.val_ids = task_ids(wt / "tasks" / suite / "val.jsonl")
+        self.train_ids = task_ids(wt / "tasks" / suite / "train.jsonl")
 
     def sha(self) -> str:
         return sh(["git", "rev-parse", "--short=7", "HEAD"], self.wt).stdout.strip()
@@ -272,7 +274,10 @@ def teardown(wt: Path, name: str, keep: Path) -> None:
         src = wt / item
         if src.exists():
             dest = keep / Path(item).name
-            shutil.rmtree(dest, ignore_errors=True) if src.is_dir() else dest.unlink(missing_ok=True)
+            if src.is_dir():
+                shutil.rmtree(dest, ignore_errors=True)
+            else:
+                dest.unlink(missing_ok=True)
             shutil.move(str(src), str(dest))
     sh(["git", "worktree", "remove", "--force", str(wt)], REPO)
     sh(["git", "branch", "-qD", f"meta/{name}"], REPO)

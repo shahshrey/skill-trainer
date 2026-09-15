@@ -11,9 +11,10 @@ domain guidance in its feedback rendering.
 """
 from __future__ import annotations
 
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
-import numpy as np
+if TYPE_CHECKING:  # numpy is the caller's dependency; only the annotation needs it
+    import numpy as np
 
 
 def failure_signature(scores: list[float], threshold: float) -> dict:

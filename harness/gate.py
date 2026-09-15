@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 
 def mixed_score(hard: float, soft: float, soft_weight: float = 0.5) -> float:
@@ -66,17 +67,16 @@ def decide(
             current, best, current_secondary,
         )
 
-    new_secondary = cand_secondary if cand_secondary is not None else None
     if best_eligible and candidate > best:
         return _result(
             "accept_new_best",
             f"primary {candidate:.4f} beats current {current:.4f} and best {best:.4f}",
-            candidate, candidate, new_secondary,
+            candidate, candidate, cand_secondary,
         )
     return _result(
         "accept",
         f"primary {candidate:.4f} beats current {current:.4f} (best {best:.4f} unchanged)",
-        candidate, best, new_secondary,
+        candidate, best, cand_secondary,
     )
 
 
@@ -145,24 +145,25 @@ def decide_paired(
         for key, entry in ref_tasks.items():
             refs.setdefault(key, []).append(_mixed_of(entry, mixed_weight))
 
-    def suite_of(entry: dict) -> str:
-        return str(entry.get("suite", "primary"))
-
     deltas: dict[str, list[float]] = {}
     cand_primary_mixed: list[float] = []
     unpaired = 0
     for key, entry in candidate_tasks.items():
-        s = suite_of(entry)
+        suite = str(entry.get("suite", "primary"))
         cmx = _mixed_of(entry, mixed_weight)
-        if primary_suite is None or s == primary_suite:
+        if primary_suite is None or suite == primary_suite:
             cand_primary_mixed.append(cmx)
         if key not in refs:
             unpaired += 1
             continue
-        deltas.setdefault(s, []).append(cmx - sum(refs[key]) / len(refs[key]))
+        deltas.setdefault(suite, []).append(cmx - sum(refs[key]) / len(refs[key]))
 
-    primary_key = primary_suite if primary_suite is not None else \
-        (next(iter(deltas)) if len(deltas) == 1 else "primary")
+    if primary_suite is not None:
+        primary_key = primary_suite
+    elif len(deltas) == 1:
+        primary_key = next(iter(deltas))  # single-suite batch: whatever it calls itself
+    else:
+        primary_key = "primary"
     primary = deltas.get(primary_key, [])
     stats: dict = {"n_pairs": len(primary), "unpaired": unpaired,
                    "references": len(reference_tasks_list)}
@@ -240,7 +241,6 @@ def main() -> None:
     if args.paired:
         if not (args.candidate_scores and args.reference_scores):
             ap.error("--paired requires --candidate-scores and --reference-scores")
-        from pathlib import Path
         # multiple candidate files merge by workspace key (near-miss retest:
         # the seed-extension batch unions with the original val batch)
         cand: dict = {}

@@ -73,46 +73,42 @@ def _append_point(text: str) -> int:
     return m.start() if m else len(text)
 
 
+def _apply_one(text: str, edit: dict) -> tuple[str, str | None]:
+    """Apply a single op. Returns (new_text, None) on success, or
+    (text unchanged, reason) when the op is refused."""
+    op = edit.get("op")
+    content = edit.get("content") or ""
+    if op not in ("append", "insert_after", "replace", "delete"):
+        return text, f"unknown op {op!r}"
+    if op == "replace" and not content.strip():
+        return text, "replace with empty content (use delete)"
+    if op in ("append", "insert_after") and not content.strip():
+        return text, f"{op} with empty content"
+
+    if op == "append":
+        point = _append_point(text)
+        separator = "\n" if point and not text[:point].endswith("\n\n") else ""
+        return text[:point] + separator + content.rstrip("\n") + "\n" + text[point:], None
+
+    location = _find_target(text, edit.get("target", ""), protected_spans(text))
+    if isinstance(location, str):
+        return text, f"{op}: {location}"
+    start, end = location
+    if op == "insert_after":
+        return text[:end] + "\n" + content.rstrip("\n") + text[end:], None
+    if op == "replace":
+        return text[:start] + content + text[end:], None
+    return text[:start] + text[end:], None  # delete
+
+
 def apply_edits(text: str, edits: list[dict]) -> tuple[str, list[str]]:
-    """Apply edits sequentially. Returns (new_text, errors). errors non-empty => text unchanged."""
-    errors: list[str] = []
+    """Apply edits in order, all-or-nothing. Returns (new_text, errors); a
+    non-empty errors list means the returned text is the original."""
     work = text
     for i, edit in enumerate(edits):
-        op = edit.get("op")
-        spans = protected_spans(work)
-        if op == "append":
-            content = edit.get("content", "")
-            if not content.strip():
-                errors.append(f"edit {i}: append with empty content")
-                break
-            point = _append_point(work)
-            insert = ("\n" if point and not work[:point].endswith("\n\n") else "") + content.rstrip("\n") + "\n"
-            work = work[:point] + insert + work[point:]
-        elif op in ("insert_after", "replace", "delete"):
-            loc = _find_target(work, edit.get("target", ""), spans)
-            if isinstance(loc, str):
-                errors.append(f"edit {i} ({op}): {loc}")
-                break
-            start, end = loc
-            if op == "insert_after":
-                content = edit.get("content", "")
-                if not content.strip():
-                    errors.append(f"edit {i}: insert_after with empty content")
-                    break
-                work = work[:end] + "\n" + content.rstrip("\n") + work[end:]
-            elif op == "replace":
-                content = edit.get("content", "")
-                if not content.strip():
-                    errors.append(f"edit {i}: replace with empty content (use delete)")
-                    break
-                work = work[:start] + content + work[end:]
-            else:  # delete
-                work = work[:start] + work[end:]
-        else:
-            errors.append(f"edit {i}: unknown op {op!r}")
-            break
-    if errors:
-        return text, errors
+        work, refusal = _apply_one(work, edit)
+        if refusal:
+            return text, [f"edit {i}: {refusal}"]
     return work, []
 
 
@@ -126,10 +122,13 @@ def main() -> None:
     raw = sys.stdin.read() if args.edits == "-" else Path(args.edits).read_text(encoding="utf-8")
     try:
         payload = json.loads(raw)
-        edits = payload["edits"] if isinstance(payload, dict) else payload
-        assert isinstance(edits, list)
-    except (json.JSONDecodeError, KeyError, AssertionError) as exc:
+    except json.JSONDecodeError as exc:
         print(json.dumps({"applied": 0, "errors": [f"malformed edits JSON: {exc}"]}), file=sys.stderr)
+        sys.exit(2)
+    edits = payload.get("edits") if isinstance(payload, dict) else payload
+    if not isinstance(edits, list):
+        print(json.dumps({"applied": 0, "errors": ["malformed edits JSON: expected a list of ops"]}),
+              file=sys.stderr)
         sys.exit(2)
 
     skill_path = Path(args.skill)

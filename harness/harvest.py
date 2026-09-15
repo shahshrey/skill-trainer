@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Mine agent session transcripts for recurring task candidates (plan §10).
+"""Mine agent session transcripts for recurring task candidates.
 
 Usage:
   harvest.py --source claude|codex|cursor|all --out candidates.jsonl \
@@ -23,7 +23,6 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import sys
 from pathlib import Path
 
 STOPWORDS = frozenset(
@@ -176,7 +175,6 @@ def main() -> None:
     out.write_text("".join(json.dumps(c) + "\n" for c in candidates), encoding="utf-8")
     print(json.dumps({"scanned_prompts": len(prompts), "candidates": len(candidates),
                       "out": str(out)}))
-    sys.exit(0)
 
 
 if __name__ == "__main__":

@@ -6,8 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "harness"))
-from coverage import normalize, report  # noqa: E402
+from coverage import normalize, report
 
 REPO = Path(__file__).resolve().parent.parent
 

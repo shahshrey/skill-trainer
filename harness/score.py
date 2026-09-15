@@ -58,12 +58,16 @@ def load_rubric(suite: Path):
     return module
 
 
+def scoring_mode(task: dict, config: dict) -> str:
+    """The task's own scoring mode, else the suite default, else checklist."""
+    return (task.get("scoring") or {}).get("mode") or config.get("default_mode", "checklist")
+
+
 def score_task(task: dict, workdir: Path, mode: str, config: dict, rubric) -> dict:
-    scoring = dict(task.get("scoring") or {})
-    scoring.setdefault("mode", config.get("default_mode", "checklist"))
+    scoring = task.get("scoring") or {}
+    smode = scoring_mode(task, config)
     output_path = workdir / "output.txt"
     output = output_path.read_text(encoding="utf-8") if output_path.exists() else ""
-    smode = scoring["mode"]
 
     if not output.strip() and smode != "rubric":
         return {"hard": 0, "soft": 0.0, "checks": ["output_empty"], "mode": smode}
@@ -114,25 +118,23 @@ def aggregate(results: dict[str, dict], suites: dict[str, str], weight: float) -
     by_suite: dict[str, list[str]] = {}
     for tid, suite_name in suites.items():
         by_suite.setdefault(suite_name, []).append(tid)
-    if len(by_suite) > 1 or (by_suite and next(iter(by_suite)) != "primary"):
+    if set(by_suite) != {"primary"}:
         out["by_suite"] = {name: agg(ids) for name, ids in sorted(by_suite.items())}
     return out
 
 
-def _score_one(payload: tuple[str, str, str]) -> tuple[str, dict, str]:
+def _score_one(payload: tuple[str, str, str]) -> tuple[str, dict]:
     """Pool worker: score one workspace (rubric re-loaded per process;
     render-heavy rubrics dwarf the import cost)."""
     suite_s, wd_s, mode = payload
     suite, wd = Path(suite_s), Path(wd_s)
     config = suite_config(suite)
     task = json.loads((wd / "task.json").read_text(encoding="utf-8"))
-    smode = (task.get("scoring") or {}).get(
-        "mode", config.get("default_mode", "checklist"))
-    rubric = load_rubric(suite) if smode == "rubric" else None
+    rubric = load_rubric(suite) if scoring_mode(task, config) == "rubric" else None
     result = dict(score_task(task, wd, mode, config, rubric),
                   task=str(task.get("id")),
                   suite=str(task.get("suite", "primary")))
-    return wd.name, result, str(task.get("suite", "primary"))
+    return wd.name, result
 
 
 def main() -> None:
@@ -163,22 +165,18 @@ def main() -> None:
 
     # Key by workspace name: K rollouts of one task are K separate
     # samples (the gate compares means over K x |val|), never collapsed.
-    results: dict[str, dict] = {}
-    suites: dict[str, str] = {}
     payloads = [(str(suite), str(wd), args.mode) for wd in workdirs]
     try:
         if args.jobs > 1:
             with ProcessPoolExecutor(max_workers=args.jobs) as ex:
-                scored = list(ex.map(_score_one, payloads))
+                results = dict(ex.map(_score_one, payloads))
         else:
-            scored = [_score_one(p) for p in payloads]
-        for key, result, suite_name in scored:
-            results[key] = result
-            suites[key] = suite_name
+            results = dict(map(_score_one, payloads))
     except Exception as exc:  # noqa: BLE001; a scoring bug must read as crash, not 0.0
         print(json.dumps({"error": f"{type(exc).__name__}: {exc}"}), file=sys.stderr)
         sys.exit(2)
 
+    suites = {key: result["suite"] for key, result in results.items()}
     report = {"mode": args.mode, "tasks": results,
               "aggregate": aggregate(results, suites, weight)}
     print(json.dumps(report, indent=2))

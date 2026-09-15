@@ -1,11 +1,7 @@
 """Row-diagnosis classes (harness/diagnose_rows.py)."""
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "harness"))
-from diagnose_rows import diagnose  # noqa: E402
+from diagnose_rows import diagnose
 
 EXP = [("Books", 300), ("Toys", 200), ("Home", 100)]
 

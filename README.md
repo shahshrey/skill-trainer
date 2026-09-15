@@ -31,7 +31,7 @@ editor never saw, keep it only if the score strictly improves. Rejected
 edits roll back with `git reset --hard` and get fed to future editors as
 evidence of what didn't work.
 
-Zero framework dependencies. The harness is plain Python (stdlib + numpy),
+Zero framework dependencies. The harness is plain Python (stdlib only),
 the optimizer is a manager agent following [`PROGRAM.md`](PROGRAM.md), and
 everything that "learns" is markdown. All model work goes through the agent
 CLI you already have — no API keys beyond the CLIs themselves, billed on
@@ -164,6 +164,12 @@ makes no LLM calls.
 The skill being trained lives at `skills/<skill-name>/SKILL.md`, with
 optimizer memory in `META.md` beside it.
 
+Not sure which tasks to write? `harness/harvest.py` mines your local agent
+transcripts (Claude Code, Codex, Cursor) for requests that recur across
+sessions and emits them as candidate tasks in JSONL for you to curate into
+`train.jsonl` and `val.jsonl`. It only reads transcripts; it never writes
+task files.
+
 ## Launch a real training run
 
 ```bash
@@ -189,7 +195,7 @@ Before a real run, copy `runs/CONFIG_TEMPLATE.md`'s JSON into
 PROGRAM.md            manager agent instructions; the whole loop is here
 train.sh              relaunch wrapper; keeps the manager alive
 prompts/              worker prompt templates (editor, ranker, rollout, ...)
-harness/              the ONLY Python code; read-only during training
+harness/              the training engine; read-only during training
 examples/mock-demo/   complete example suite; template + meta-eval fixture
 runs/CONFIG_TEMPLATE.md  canonical run config
 tests/                deterministic framework tests + meta_eval.py

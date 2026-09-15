@@ -1,3 +1,0 @@
-# Runtime deps of the harness. Everything else is stdlib.
-# numpy: used by harness/diagnosis.py (failure-shape diagnosis).
-numpy

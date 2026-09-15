@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from run_task import normalize, run_mock
+from run_task import BACKENDS, normalize, run_mock, suite_smoke_tools
 
 HARNESS = Path(__file__).resolve().parent.parent / "harness"
 
@@ -108,7 +108,6 @@ def test_stage_dir_seeds_workspace(tmp_path):
 
 
 def test_claude_backend_honors_skill_trainer_model_env(monkeypatch):
-    from run_task import BACKENDS
     monkeypatch.delenv("SKILL_TRAINER_MODEL", raising=False)
     cmd = BACKENDS["claude"]("p", "s", [])
     assert "--model" not in cmd
@@ -119,7 +118,6 @@ def test_claude_backend_honors_skill_trainer_model_env(monkeypatch):
 
 
 def test_codex_backend_honors_model_and_effort_env(monkeypatch):
-    from run_task import BACKENDS
     monkeypatch.delenv("SKILL_TRAINER_MODEL", raising=False)
     monkeypatch.delenv("SKILL_TRAINER_EFFORT", raising=False)
     cmd = BACKENDS["codex"]("p", "s", [])
@@ -135,7 +133,6 @@ def test_codex_backend_honors_model_and_effort_env(monkeypatch):
 
 
 def test_opencode_backend_honors_model_and_effort_env(monkeypatch):
-    from run_task import BACKENDS
     monkeypatch.delenv("SKILL_TRAINER_MODEL", raising=False)
     monkeypatch.delenv("SKILL_TRAINER_EFFORT", raising=False)
     cmd = BACKENDS["opencode"]("p", "s", [])
@@ -149,7 +146,6 @@ def test_opencode_backend_honors_model_and_effort_env(monkeypatch):
 
 
 def test_cursor_backend_honors_model_env(monkeypatch):
-    from run_task import BACKENDS
     monkeypatch.delenv("SKILL_TRAINER_MODEL", raising=False)
     cmd = BACKENDS["cursor"]("p", "s", [])
     assert "--model" not in cmd
@@ -162,7 +158,6 @@ def test_smoke_tools_come_from_suite_config(tmp_path):
     # The harness hardcodes no tool checks; the suite's scoring.md
     # `smoke_tools` list owns them (generalization: a non-media suite
     # must not require ffmpeg).
-    from run_task import suite_smoke_tools
     suite = tmp_path / "suite"
     suite.mkdir()
     assert suite_smoke_tools(suite) == []  # no scoring.md

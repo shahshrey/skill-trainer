@@ -6,8 +6,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "harness"))
-from gate import decide_paired  # noqa: E402
+from gate import decide_paired
 
 REPO = Path(__file__).resolve().parent.parent
 

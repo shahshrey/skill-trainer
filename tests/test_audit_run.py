@@ -1,9 +1,10 @@
 """Audit script: each audit catches its violation and passes clean runs."""
 import json
+import subprocess
 from pathlib import Path
 
-import audit_run
-from audit_run import audit_leakage, audit_monotone, audit_reproposal, load_tsv
+from audit_run import (audit_leakage, audit_monotone, audit_protected,
+                       audit_reproposal, load_tsv)
 
 TSV = """# comment
 commit\tepoch\tstep\tmode\tval_mixed\tval_hard\tval_soft\tsec_mixed\tn_val_rollouts\tstatus\tedits_applied\tdescription
@@ -71,7 +72,6 @@ def test_leakage_clean_run(tmp_path):
 
 def _skill_repo(tmp_path, commits):
     """Tiny repo whose skill file evolves per (subject, protected_content)."""
-    import subprocess
     repo = tmp_path / "repo"
     (repo / "skills").mkdir(parents=True)
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
@@ -95,19 +95,15 @@ def test_protected_flags_nonepoch_change_and_since_exempts_history(tmp_path):
         ("dev commit touches protected", "v1"),   # pre-run history
         ("epoch 1 boundary", "v2"),                # legal in-run change
     ])
-    full = audit_run.audit_protected(skill, repo)
+    full = audit_protected(skill, repo)
     assert any("dev commit" in f for f in full)
-    scoped = audit_run.audit_protected(skill, repo, since=shas[1])
+    scoped = audit_protected(skill, repo, since=shas[1])
     assert scoped == []  # run started at shas[1]; earlier history is exempt
 
 
 def test_reproposal_ignores_identical_gate_reasons():
     """sql05 false positive: two DIFFERENT edits rejected with numerically
     identical paired-gate reasons must not be flagged as a re-proposal."""
-    import sys
-    from pathlib import Path as P
-    sys.path.insert(0, str(P(__file__).resolve().parent.parent / "harness"))
-    from audit_run import audit_reproposal
     rows = [
         {"epoch": "0", "step": "1", "status": "discard", "description":
          'gate reject (paired +0.0190, se 0.0190, not significant) | '

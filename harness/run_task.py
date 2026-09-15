@@ -52,66 +52,61 @@ import sys
 import time
 from pathlib import Path
 
+from score import suite_config
+
+# train.sh exports these so every rollout in a batch runs the same model.
+MODEL_VAR = "SKILL_TRAINER_MODEL"
+EFFORT_VAR = "SKILL_TRAINER_EFFORT"
+
+
+def _env_opt(flag: str, var: str, template: str = "{}") -> list[str]:
+    """[flag, value] when the env var is set, else [] (the CLI's default)."""
+    value = os.environ.get(var)
+    return [flag, template.format(value)] if value else []
+
+
+def _prepended(skill_text: str, prompt: str) -> str:
+    """Skill text ahead of the prompt, for CLIs with no system-prompt flag."""
+    return skill_text + "\n\n---\n\n" + prompt
+
+
 # Per-backend command builders. prompt is passed as a single argument; the
 # defaults give the target agent non-interactive file/shell access, which
-# agentic tasks (write HTML, run capture.py) require.
+# agentic tasks (write HTML, run capture.py) require. Backends that take the
+# prompt positionally fence it behind "--": injected skill text usually opens
+# with "---" frontmatter, which the CLI otherwise parses as an option.
 BACKENDS = {
-    "claude": lambda prompt, skill_text, extra: (
-        ["claude", "-p", prompt, "--append-system-prompt", skill_text,
-         "--dangerously-skip-permissions",
-         *(["--model", os.environ["SKILL_TRAINER_MODEL"]]
-           if os.environ.get("SKILL_TRAINER_MODEL") else []), *extra]),
-    # OpenAI Codex CLI (headless). --full-auto was removed in codex 0.149;
-    # --sandbox workspace-write is its replacement (exec never prompts, so no
-    # approval flag is needed). --skip-git-repo-check keeps rollouts working
-    # when the workdir sits outside any git repo. Model via -m; reasoning
-    # effort has no flag of its own, only the config override.
-    "codex": lambda prompt, skill_text, extra: (
-        ["codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check",
-         *(["-m", os.environ["SKILL_TRAINER_MODEL"]]
-           if os.environ.get("SKILL_TRAINER_MODEL") else []),
-         *(["-c", "model_reasoning_effort=" + os.environ["SKILL_TRAINER_EFFORT"]]
-           if os.environ.get("SKILL_TRAINER_EFFORT") else []),
-         *extra, "--", skill_text + "\n\n---\n\n" + prompt]),
-    # Cursor agent CLI (headless). --trust skips the workspace-trust prompt,
-    # --force auto-allows commands; both are required for unattended runs.
-    # Model id bakes in reasoning effort (e.g. cursor-grok-4.5-high), so
-    # SKILL_TRAINER_MODEL carries the full id and there is no effort flag.
-    # The trailing "--" is load-bearing: injected skill text often starts
-    # with "---" frontmatter, which the CLI otherwise parses as an option.
-    "cursor": lambda prompt, skill_text, extra: (
-        ["cursor-agent", "-p", "--force", "--trust",
-         *(["--model", os.environ["SKILL_TRAINER_MODEL"]]
-           if os.environ.get("SKILL_TRAINER_MODEL") else []),
-         *extra, "--", skill_text + "\n\n---\n\n" + prompt]),
-    # GitHub Copilot CLI (headless). No system-prompt flag, so the skill is
-    # prepended like codex/cursor. Model/effort via env so batches stay
-    # uniform: SKILL_TRAINER_MODEL (e.g. gpt-5.6-sol), SKILL_TRAINER_EFFORT.
-    "copilot": lambda prompt, skill_text, extra: (
-        ["copilot", "-p", skill_text + "\n\n---\n\n" + prompt,
-         "--allow-all-tools", "--no-color",
-         *(["--model", os.environ["SKILL_TRAINER_MODEL"]]
-           if os.environ.get("SKILL_TRAINER_MODEL") else []),
-         *(["--effort", os.environ["SKILL_TRAINER_EFFORT"]]
-           if os.environ.get("SKILL_TRAINER_EFFORT") else []), *extra]),
-    # opencode CLI (headless). No system-prompt flag, so the skill is
-    # prepended like codex/cursor. --auto approves permissions unattended.
-    # SKILL_TRAINER_MODEL is provider/model (e.g. anthropic/claude-sonnet-4-5);
-    # reasoning effort is the separate --variant flag (e.g. high, max,
-    # minimal). The trailing "--" fences the skill frontmatter like cursor.
-    "opencode": lambda prompt, skill_text, extra: (
-        ["opencode", "run", "--auto",
-         *(["-m", os.environ["SKILL_TRAINER_MODEL"]]
-           if os.environ.get("SKILL_TRAINER_MODEL") else []),
-         *(["--variant", os.environ["SKILL_TRAINER_EFFORT"]]
-           if os.environ.get("SKILL_TRAINER_EFFORT") else []),
-         *extra, "--", skill_text + "\n\n---\n\n" + prompt]),
+    "claude": lambda prompt, skill_text, extra: [
+        "claude", "-p", prompt, "--append-system-prompt", skill_text,
+        "--dangerously-skip-permissions", *_env_opt("--model", MODEL_VAR), *extra],
+    # --full-auto was removed in codex 0.149; --sandbox workspace-write is its
+    # replacement (exec never prompts). --skip-git-repo-check keeps rollouts
+    # working when the workdir sits outside any git repo. Reasoning effort
+    # has no flag of its own, only the config override.
+    "codex": lambda prompt, skill_text, extra: [
+        "codex", "exec", "--sandbox", "workspace-write", "--skip-git-repo-check",
+        *_env_opt("-m", MODEL_VAR), *_env_opt("-c", EFFORT_VAR, "model_reasoning_effort={}"),
+        *extra, "--", _prepended(skill_text, prompt)],
+    # --trust skips the workspace-trust prompt, --force auto-allows commands.
+    # Cursor model ids bake in reasoning effort (e.g. cursor-grok-4.5-high),
+    # so there is no effort flag.
+    "cursor": lambda prompt, skill_text, extra: [
+        "cursor-agent", "-p", "--force", "--trust", *_env_opt("--model", MODEL_VAR),
+        *extra, "--", _prepended(skill_text, prompt)],
+    "copilot": lambda prompt, skill_text, extra: [
+        "copilot", "-p", _prepended(skill_text, prompt), "--allow-all-tools", "--no-color",
+        *_env_opt("--model", MODEL_VAR), *_env_opt("--effort", EFFORT_VAR), *extra],
+    # --auto approves permissions unattended. Model is provider/model
+    # (e.g. anthropic/claude-sonnet-4-5); effort is the --variant flag.
+    "opencode": lambda prompt, skill_text, extra: [
+        "opencode", "run", "--auto", *_env_opt("-m", MODEL_VAR),
+        *_env_opt("--variant", EFFORT_VAR), *extra, "--", _prepended(skill_text, prompt)],
 }
 BACKEND_BINARIES = {"claude": "claude", "codex": "codex", "cursor": "cursor-agent",
                     "copilot": "copilot", "opencode": "opencode"}
 
-# pip requirement name -> import name, for --smoke
-IMPORT_NAMES = {"pillow": "PIL", "playwright": "playwright", "numpy": "numpy", "pytest": "pytest"}
+# pip requirement name -> import name, when they differ (for --smoke)
+IMPORT_NAMES = {"pillow": "PIL"}
 
 
 def normalize(text: str) -> str:
@@ -202,38 +197,37 @@ def suite_smoke_tools(suite: Path) -> list[str]:
     (`smoke_tools`). The suite owns its tooling needs; the harness
     hardcodes none (an unconditional ffmpeg check once blocked non-media
     suites on machines without it)."""
-    scoring_md = suite / "scoring.md"
-    if not scoring_md.exists():
-        return []
-    m = re.search(r"```json\s*\n([\s\S]*?)\n```", scoring_md.read_text(encoding="utf-8"))
-    if not m:
-        return []
     try:
-        return list(json.loads(m.group(1)).get("smoke_tools", []))
+        return list(suite_config(suite).get("smoke_tools", []))
     except (json.JSONDecodeError, AttributeError):
         return []
 
 
+def requirement_names(requirements: Path) -> list[str]:
+    """Package names from a pip requirements file (specifiers stripped)."""
+    names = []
+    for line in requirements.read_text(encoding="utf-8").splitlines():
+        name = re.split(r"[<>=!\[ ;#]", line.strip(), 1)[0].lower()
+        if name:
+            names.append(name)
+    return names
+
+
 def smoke(suite: Path | None, backend: str | None) -> int:
     checks: list[tuple[str, bool, str]] = []
-    have_playwright = False
     if suite is not None:
-        req = suite / "requirements.txt"
-        if req.exists():
-            for line in req.read_text(encoding="utf-8").splitlines():
-                name = re.split(r"[<>=!\[ ;#]", line.strip(), 1)[0].lower()
-                if not name:
-                    continue
-                mod = IMPORT_NAMES.get(name, name.replace("-", "_"))
-                try:
-                    importlib.import_module(mod)
-                    checks.append((f"dep:{name}", True, ""))
-                    have_playwright = have_playwright or name == "playwright"
-                except ImportError as exc:
-                    checks.append((f"dep:{name}", False, str(exc)))
+        requirements = suite / "requirements.txt"
+        names = requirement_names(requirements) if requirements.exists() else []
+        for name in names:
+            module = IMPORT_NAMES.get(name, name.replace("-", "_"))
+            try:
+                importlib.import_module(module)
+                checks.append((f"dep:{name}", True, ""))
+            except ImportError as exc:
+                checks.append((f"dep:{name}", False, str(exc)))
         for tool in suite_smoke_tools(suite):
             checks.append((f"tool:{tool}", shutil.which(tool) is not None, "not on PATH"))
-    if have_playwright:
+    if ("dep:playwright", True, "") in checks:
         try:
             from playwright.sync_api import sync_playwright
             with sync_playwright() as p:
@@ -329,7 +323,7 @@ def main() -> None:
         "output": str(workdir / "output.txt"),
         "timed_out": code == 124,
     }))
-    sys.exit(0 if code == 0 else (124 if code == 124 else 1))
+    sys.exit(code if code in (0, 124) else 1)
 
 
 if __name__ == "__main__":
