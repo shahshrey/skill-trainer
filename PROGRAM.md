@@ -125,10 +125,9 @@ b. **Editors.** Fill `prompts/editor_error.md` with the failed receipts
    (and `prompts/editor_success.md` with successful ones, when both exist),
    dispatch, and pool the returned edits. `{FAILURE_CLASS_GUIDE}` is
    filled from `tasks/<skill>/failure_classes.md`, the suite's
-   class-to-mechanism guide (row-set suites can start from
-   `harness/diagnose_rows_classes.md`). If the suite ships none, fill it
-   with: "No class guide for this suite. Infer the mechanism from the
-   check names and diagnostic excerpts in the receipts."
+   class-to-mechanism guide. If the suite ships none, fill it with: "No
+   class guide for this suite. Infer the mechanism from the check names
+   and diagnostic excerpts in the receipts."
 c. **Size the update.** If the pool exceeds L, fill `prompts/ranker.md`
    (SELECT_BUDGET=L) to rank and cut. Fill `prompts/learning_rate.md` with
    the ranked items and step evidence, then apply the top `learning_rate`
@@ -176,6 +175,10 @@ f. **Gate.** Prefer the PAIRED gate. It compares the candidate to the
    --current <current> --best <best> --primary-suite <primary>
    --secondary-suite <secondary, when declared> --mixed-weight <w>`
    (add `--no-best` when the step-gate mode is not authoritative).
+   A `rubric drift` reject is not a verdict on the edit: the suite's
+   scoring contract changed since the references were scored. Reset the
+   candidate, re-baseline under the new rubric (§1 step 6), then retry
+   the step.
    The reference set: the 3 baseline scores.json files at step 1, replaced
    by the accepted candidate's val scores.json after every accept. Record
    the current reference paths as a `#`-comment in results.tsv. Fall back
@@ -326,34 +329,6 @@ concurrency cap, each in its own workspace
    from scratch (tasks without a staging dir are unaffected). Whether a
    run may use it is set in config.json. Mixing staged and scratch
    batches inside one gate comparison invalidates the gate.
-   Three generic harness modules support this loop (suites map their
-   output to domain guidance; the modules themselves know nothing about
-   any suite):
-   - `harness/diagnosis.py`: `failure_signature(scores, threshold)`
-     classifies a per-unit score series as pass / uniform_shortfall
-     (everything fails by a similar margin: a global property is wrong) /
-     clustered_shortfall (failures contiguous in a minority of units:
-     wrong only there) / scattered, with failing ranges;
-     `worst_blocks(cand, ref, metric)` localizes a 2-D comparison to its
-     worst regions in resolution-independent fraction coordinates.
-     Shape-first feedback beats a flat worst-unit list: generic lists
-     plateaued in the 2026-08-04 sweep; region+shape diagnosis solved
-     the stragglers.
-   - `harness/carryforward.py`: on archiving a FAILED attempt, harvest
-     its transcript tail (`conclusion.txt`) and small `_*` analysis
-     artifacts; on staging, re-present both so the next attempt starts
-     where the last one stopped. A timed-out attempt that found the root
-     cause but applied zero edits is a total loss without this.
-   - `harness/escalation.py`: `next_plan(stalls, timed_out, base)`
-     picks the next attempt's time budget and staged-vs-scratch mode:
-     double the budget after a timeout or a stalled round (no new
-     archive entry), and alternate scratch attempts after repeated
-     stalls to escape a local optimum. `update_stalls` maintains the
-     per-task counters from archive-digest deltas.
-   Verify-archived principle: after any scored batch, every rollout the
-   scorer marked as a winner MUST be findable in the durable store.
-   Raise and stop iterating if not. A scored-but-unarchived winner is
-   silent data loss (it happened: 2026-08-04 digest-collision bug).
 3. Score the batch: `$PY harness/score.py --suite tasks/<skill>
    --batch runs/<tag>/step_<n>/<mode> --mode <mode>`. Empty or garbled
    score output = crash: log `crash`, reset the candidate, move on. A
@@ -403,12 +378,13 @@ are framework doctrine, suite-agnostic:
   usually the part the task is actually about, can be entirely wrong
   inside a passing aggregate. Measure the dynamic region separately and
   gate on it.
-- **Verdicts need provenance** (`harness/provenance.py`). Stamp every
-  stored verdict with the rubric version that issued it (`stamp`), treat
-  any verdict from an older version as stale (`stale`), and on a rubric
-  upgrade re-judge the whole archive, demoting with history kept
-  (`demote`: `previous` + `demoted_by`). Never let verdicts from a
-  weaker rubric silently count as solved.
+- **Verdicts carry provenance.** `score.py` stamps every scores.json
+  with `rubric_version`, a hash of `scoring.md` + `rubric.py`. The paired
+  gate refuses to compare reports with different stamps (or no stamp),
+  and the post-run `rubric` audit checks the whole run shares one. A
+  rubric change mid-run is therefore a re-baseline (§1 step 6 under the
+  new rubric, fresh reference set), never a comparison: verdicts from a
+  weaker rubric must not silently count as solved.
 - **Human spot-checks are rubric calibration, not QA.** Periodically show
   the solved set to a human; any divergence between their judgment and
   the rubric's is a measurement bug and outranks all training work.

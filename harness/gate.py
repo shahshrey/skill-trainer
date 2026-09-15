@@ -14,6 +14,9 @@ Rules:
   the caller's concern; pass ``best_eligible=False`` to cap at ``accept``.
 - Scores from different modes are never compared; callers track
   current/best per mode and must not mix them.
+- Paired mode also refuses reports scored under different rubric versions
+  (score.py stamps each report; an unstamped report is unknown provenance
+  and refused too). A rubric edit mid-run means re-baseline, not compare.
 
 CLI: gate.py --candidate 0.71 --current 0.65 --best 0.70 --min-delta 0.02
              [--cand-secondary 0.5 --current-secondary 0.55] [--no-best]
@@ -206,6 +209,17 @@ def decide_paired(
                 paired=stats)
 
 
+def rubric_drift(reports: list[dict]) -> str | None:
+    """Reason to refuse pairing these scores.json reports, or None when
+    they all carry the same rubric_version stamp."""
+    stamps = [r.get("rubric_version") for r in reports]
+    if any(s is None for s in stamps):
+        return "rubric drift: unstamped report (unknown provenance); re-baseline"
+    if len(set(stamps)) > 1:
+        return "rubric drift: reports stamped " + ", ".join(sorted(set(stamps))) + "; re-baseline"
+    return None
+
+
 def min_delta_from_baseline(baseline_scores: list[float], floor: float = 0.01) -> float:
     """min_delta = max(floor, spread of repeated baseline val passes)."""
     if not baseline_scores:
@@ -241,13 +255,18 @@ def main() -> None:
     if args.paired:
         if not (args.candidate_scores and args.reference_scores):
             ap.error("--paired requires --candidate-scores and --reference-scores")
+        cand_reports = [json.loads(Path(p).read_text()) for p in args.candidate_scores]
+        ref_reports = [json.loads(Path(p).read_text()) for p in args.reference_scores]
+        drift = rubric_drift(cand_reports + ref_reports)
+        if drift:
+            print(json.dumps(_result("reject", drift, args.current, args.best, None), indent=2))
+            return
         # multiple candidate files merge by workspace key (near-miss retest:
         # the seed-extension batch unions with the original val batch)
         cand: dict = {}
-        for path in args.candidate_scores:
-            cand.update(json.loads(Path(path).read_text())["tasks"])
-        refs = [json.loads(Path(p).read_text())["tasks"]
-                for p in args.reference_scores]
+        for report in cand_reports:
+            cand.update(report["tasks"])
+        refs = [report["tasks"] for report in ref_reports]
         print(json.dumps(decide_paired(
             cand, refs, current=args.current, best=args.best,
             primary_suite=args.primary_suite,

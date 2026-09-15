@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-from rollout_batch import Job, build_cmd
+from rollout_batch import ORPHAN_MARKERS, Job, build_cmd, find_orphans
 
 HARNESS = Path(__file__).resolve().parent.parent / "harness"
 BATCH = str(HARNESS / "rollout_batch.py")
@@ -123,6 +123,35 @@ def test_stale_kill_reaps_the_whole_process_group(tmp_path):
     except ProcessLookupError:
         alive = False
     assert not alive, f"orphaned sleep child pid={pid} survived the group kill"
+
+
+def test_find_orphans_detects_reparented_wrappers_and_children():
+    """Killing a worker's process group can reparent its CLI wrapper to
+    PID 1, where it keeps consuming tokens; the marker must catch the
+    wrapper and its children but leave live workers alone."""
+    ps = "\n".join([
+        "  1     0 /sbin/launchd",
+        "  500   1 sh -c __copilot_pid_path=/tmp/x copilot -p prompt",
+        "  501 500 node /usr/local/bin/copilot",
+        # live wrapper: parent is a run_task process, not PID 1
+        "  600 400 sh -c __copilot_pid_path=/tmp/y copilot -p prompt",
+        "  601 600 node /usr/local/bin/copilot",
+        "  700   1 some-unrelated-daemon",
+    ])
+    assert sorted(find_orphans(ps, "__copilot_pid_path")) == [500, 501]
+
+
+def test_cursor_orphan_marker_ignores_ide_worker_daemons():
+    """Cursor's IDE keeps its own `worker start` daemons at ppid 1; only
+    harness-launched headless workers (-p --force --trust) may be reaped."""
+    ps = "\n".join([
+        "  1     0 /sbin/launchd",
+        "  900   1 cursor-agent --api-key x worker start --worker-dir /repo",
+        "  910   1 cursor-agent -p --force --trust --model m -- prompt",
+        "  911 910 node helper",
+        "  920 400 cursor-agent -p --force --trust --model m -- prompt",
+    ])
+    assert sorted(find_orphans(ps, ORPHAN_MARKERS["cursor"])) == [910, 911]
 
 
 def test_stage_root_threads_through_to_run_task(tmp_path):

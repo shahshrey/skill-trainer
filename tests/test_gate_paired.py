@@ -20,6 +20,24 @@ def grid(n: int, base: float, suite: str = "query") -> dict[str, float]:
     return {f"{suite}-{i:02d}_s{i % 2}": base for i in range(n)}
 
 
+def write_report(path: Path, tasks: dict, rubric_version: str | None = "rubric-v1") -> Path:
+    """A scores.json as score.py writes it; rubric_version=None mimics a
+    report written before stamping existed."""
+    report = {"tasks": tasks}
+    if rubric_version is not None:
+        report["rubric_version"] = rubric_version
+    path.write_text(json.dumps(report))
+    return path
+
+
+def gate_paired(*args: str) -> dict:
+    out = subprocess.run(
+        [sys.executable, str(REPO / "harness" / "gate.py"), "--paired", *args,
+         "--current", "0.8", "--best", "0.8", "--primary-suite", "query"],
+        capture_output=True, text=True, check=True)
+    return json.loads(out.stdout)
+
+
 def test_uniform_gain_accepts():
     ref = batch(grid(10, 0.8))
     cand = batch({k: v + 0.05 for k, v in grid(10, 0.8).items()})
@@ -133,18 +151,37 @@ def test_no_best_caps_at_accept():
 
 def test_cli_paired(tmp_path):
     base = grid(10, 0.8)
-    (tmp_path / "ref.json").write_text(json.dumps({"tasks": batch(base)}))
-    (tmp_path / "cand.json").write_text(json.dumps(
-        {"tasks": batch({k: v + 0.05 for k, v in base.items()})}))
-    out = subprocess.run(
-        [sys.executable, str(REPO / "harness" / "gate.py"), "--paired",
-         "--candidate-scores", str(tmp_path / "cand.json"),
-         "--reference-scores", str(tmp_path / "ref.json"),
-         "--current", "0.8", "--best", "0.8", "--primary-suite", "query"],
-        capture_output=True, text=True, check=True)
-    decision = json.loads(out.stdout)
+    ref = write_report(tmp_path / "ref.json", batch(base))
+    cand = write_report(tmp_path / "cand.json",
+                        batch({k: v + 0.05 for k, v in base.items()}))
+    decision = gate_paired("--candidate-scores", str(cand), "--reference-scores", str(ref))
     assert decision["action"] == "accept_new_best"
     assert decision["paired"]["n_pairs"] == 10
+
+
+def test_cli_paired_rejects_reference_scored_under_a_different_rubric(tmp_path):
+    """A rubric edit mid-run makes every earlier reference incomparable:
+    the gate must refuse rather than pair across rubric versions."""
+    base = grid(10, 0.8)
+    ref = write_report(tmp_path / "ref.json", batch(base), rubric_version="rubric-v1")
+    cand = write_report(tmp_path / "cand.json",
+                        batch({k: v + 0.05 for k, v in base.items()}),
+                        rubric_version="rubric-v2")
+    decision = gate_paired("--candidate-scores", str(cand), "--reference-scores", str(ref))
+    assert decision["action"] == "reject"
+    assert "rubric" in decision["reason"]
+    assert "rubric-v1" in decision["reason"] and "rubric-v2" in decision["reason"]
+
+
+def test_cli_paired_rejects_unstamped_report(tmp_path):
+    """No stamp means unknown provenance; never assume it matches."""
+    base = grid(10, 0.8)
+    ref = write_report(tmp_path / "ref.json", batch(base), rubric_version=None)
+    cand = write_report(tmp_path / "cand.json",
+                        batch({k: v + 0.05 for k, v in base.items()}))
+    decision = gate_paired("--candidate-scores", str(cand), "--reference-scores", str(ref))
+    assert decision["action"] == "reject"
+    assert "rubric" in decision["reason"]
 
 
 def test_cli_scalar_mode_unchanged(tmp_path):
@@ -163,20 +200,13 @@ def test_cli_paired_merges_candidate_extension(tmp_path):
     base = grid(10, 0.8)
     ext = {k.replace("_s0", "_s2").replace("_s1", "_s3"): v
            for k, v in base.items()}
-    (tmp_path / "ref1.json").write_text(json.dumps({"tasks": batch(base)}))
-    (tmp_path / "ref2.json").write_text(json.dumps({"tasks": batch(ext)}))
-    (tmp_path / "cand1.json").write_text(json.dumps(
-        {"tasks": batch({k: v + 0.03 for k, v in base.items()})}))
-    (tmp_path / "cand2.json").write_text(json.dumps(
-        {"tasks": batch({k: v + 0.03 for k, v in ext.items()})}))
-    out = subprocess.run(
-        [sys.executable, str(REPO / "harness" / "gate.py"), "--paired",
-         "--candidate-scores", str(tmp_path / "cand1.json"),
-         str(tmp_path / "cand2.json"),
-         "--reference-scores", str(tmp_path / "ref1.json"),
-         str(tmp_path / "ref2.json"),
-         "--current", "0.8", "--best", "0.8", "--primary-suite", "query"],
-        capture_output=True, text=True, check=True)
-    decision = json.loads(out.stdout)
+    ref1 = write_report(tmp_path / "ref1.json", batch(base))
+    ref2 = write_report(tmp_path / "ref2.json", batch(ext))
+    cand1 = write_report(tmp_path / "cand1.json",
+                         batch({k: v + 0.03 for k, v in base.items()}))
+    cand2 = write_report(tmp_path / "cand2.json",
+                         batch({k: v + 0.03 for k, v in ext.items()}))
+    decision = gate_paired("--candidate-scores", str(cand1), str(cand2),
+                           "--reference-scores", str(ref1), str(ref2))
     assert decision["paired"]["n_pairs"] == 20
     assert decision["action"] == "accept_new_best"

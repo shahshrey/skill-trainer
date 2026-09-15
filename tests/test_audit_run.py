@@ -4,7 +4,8 @@ import subprocess
 from pathlib import Path
 
 from audit_run import (audit_leakage, audit_monotone, audit_protected,
-                       audit_reproposal, load_tsv)
+                       audit_reproposal, audit_rubric, load_tsv)
+from score import rubric_version
 
 TSV = """# comment
 commit\tepoch\tstep\tmode\tval_mixed\tval_hard\tval_soft\tsec_mixed\tn_val_rollouts\tstatus\tedits_applied\tdescription
@@ -68,6 +69,49 @@ def test_leakage_clean_run(tmp_path):
     (run / "step_1").mkdir(parents=True)
     (run / "step_1" / "editor_error_filled.md").write_text("only train receipts here")
     assert audit_leakage(run, suite) == []
+
+
+def _suite(tmp_path):
+    suite = tmp_path / "suite"
+    suite.mkdir()
+    (suite / "scoring.md").write_text("```json\n{}\n```\n")
+    return suite
+
+
+def _run_with_reports(tmp_path, stamps):
+    """One scores.json per stamp under run/step_<n>/cheap/, the layout
+    rollout_batch --score produces. A stamp of None means unstamped."""
+    run = tmp_path / "run"
+    for i, stamp in enumerate(stamps):
+        step = run / f"step_{i}" / "cheap"
+        step.mkdir(parents=True)
+        report = {"tasks": {}}
+        if stamp is not None:
+            report["rubric_version"] = stamp
+        (step / "scores.json").write_text(json.dumps(report))
+    return run
+
+
+def test_rubric_audit_passes_when_every_report_matches_the_suite(tmp_path):
+    suite = _suite(tmp_path)
+    current = rubric_version(suite)
+    run = _run_with_reports(tmp_path, [current, current])
+    assert audit_rubric(run, suite) == []
+
+
+def test_rubric_audit_flags_reports_from_another_rubric_version(tmp_path):
+    suite = _suite(tmp_path)
+    run = _run_with_reports(tmp_path, [rubric_version(suite), "stale-rubric"])
+    failures = audit_rubric(run, suite)
+    assert len(failures) == 1
+    assert "step_1" in failures[0] and "stale-rubric" in failures[0]
+
+
+def test_rubric_audit_flags_unstamped_reports(tmp_path):
+    suite = _suite(tmp_path)
+    run = _run_with_reports(tmp_path, [None])
+    failures = audit_rubric(run, suite)
+    assert failures and "unstamped" in failures[0]
 
 
 def _skill_repo(tmp_path, commits):

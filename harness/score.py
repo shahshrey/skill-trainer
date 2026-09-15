@@ -22,11 +22,17 @@ Batch aggregates are reported overall and per task["suite"] value (e.g.
 "clone" vs "workflow-A") so the manager can apply the two-suite gate rule.
 mixed = (1-w)*hard + w*soft with w from suite config (default 0.5).
 
+Every report carries ``rubric_version``, a hash of the suite's scoring
+contract (scoring.md + rubric.py). A verdict is only as good as the rubric
+that produced it, so the paired gate refuses to compare reports stamped
+by different versions and the post-run audit checks a run never drifted.
+
 Deterministic; no LLM calls. Exit 0 on success, 2 on scoring errors.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
@@ -37,6 +43,19 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 FENCED_JSON_RE = re.compile(r"```json\s*\n([\s\S]*?)\n```")
+RUBRIC_FILES = ("scoring.md", "rubric.py")  # the scoring contract
+
+
+def rubric_version(suite: Path) -> str:
+    """Short hash of the suite's scoring contract files. Changes whenever
+    scoring.md or rubric.py changes; ignores tasks, refs and helpers."""
+    digest = hashlib.sha256()
+    for name in RUBRIC_FILES:
+        path = suite / name
+        if path.exists():
+            digest.update(name.encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()[:12]
 
 
 def suite_config(suite: Path) -> dict:
@@ -177,8 +196,8 @@ def main() -> None:
         sys.exit(2)
 
     suites = {key: result["suite"] for key, result in results.items()}
-    report = {"mode": args.mode, "tasks": results,
-              "aggregate": aggregate(results, suites, weight)}
+    report = {"mode": args.mode, "rubric_version": rubric_version(suite),
+              "tasks": results, "aggregate": aggregate(results, suites, weight)}
     print(json.dumps(report, indent=2))
 
 

@@ -108,8 +108,10 @@ live on branches named `train/<skill-name>/<tag>`.
 
 The guardrails are structural, not aspirational: the editor never sees val
 tasks, the manager cannot modify the harness or the task suite, scores
-never compare across gate modes, and post-run audits
-(`harness/audit_run.py`) grep for leakage.
+never compare across gate modes or rubric versions (every `scores.json`
+is stamped with a hash of the scoring contract; the gate refuses
+mismatches), and post-run audits (`harness/audit_run.py`) grep for
+leakage and rubric drift.
 
 ## What a run produces
 
@@ -138,7 +140,23 @@ and `--max-steps` accordingly; there is no separate API bill.
 
 This repo is the framework only (see `PROGRAM.md` §8). Task suites and
 the skills they train live in your working copy; `tasks/` and `skills/`
-are gitignored here by design. The bundled
+are gitignored here by design.
+
+**Step 1: find the tasks.** The best training tasks are the requests you
+already make of your agent over and over. `harness/harvest.py` mines your
+local transcripts (Claude Code, Codex, Cursor) for prompts that recur
+across sessions and writes them out as candidates:
+
+```bash
+.venv/bin/python harness/harvest.py --source all --project <your-repo-path> --out candidates.jsonl
+```
+
+Each candidate carries the representative prompt, how often it recurred,
+a guess at whether the agent got it right (from your follow-up message),
+and file references back to the sessions. It only reads transcripts; you
+curate the candidates into `train.jsonl` and `val.jsonl` yourself.
+
+**Step 2: shape the suite.** The bundled
 [`examples/mock-demo`](examples/mock-demo) is a complete working suite to
 copy as a starting point. A suite is a directory:
 
@@ -163,12 +181,6 @@ makes no LLM calls.
 
 The skill being trained lives at `skills/<skill-name>/SKILL.md`, with
 optimizer memory in `META.md` beside it.
-
-Not sure which tasks to write? `harness/harvest.py` mines your local agent
-transcripts (Claude Code, Codex, Cursor) for requests that recur across
-sessions and emits them as candidate tasks in JSONL for you to curate into
-`train.jsonl` and `val.jsonl`. It only reads transcripts; it never writes
-task files.
 
 ## Launch a real training run
 

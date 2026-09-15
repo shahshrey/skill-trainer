@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from score import aggregate, score_task
+from score import aggregate, rubric_version, score_task
 
 HARNESS = Path(__file__).resolve().parent.parent / "harness"
 
@@ -103,6 +103,34 @@ def test_batch_keeps_k_rollouts_as_separate_samples(tmp_path):
     assert report["aggregate"]["overall"]["n"] == 2
     assert report["aggregate"]["overall"]["hard"] == 0.5
     assert report["tasks"]["t1_s0"]["task"] == "t1"
+
+
+def test_rubric_version_tracks_the_scoring_contract_files(tmp_path):
+    suite = tmp_path / "suite"
+    suite.mkdir()
+    (suite / "scoring.md").write_text("```json\n{}\n```\n")
+    v_before = rubric_version(suite)
+    assert v_before == rubric_version(suite)  # deterministic
+    (suite / "rubric.py").write_text("def score(task, workdir, mode): ...\n")
+    v_with_rubric = rubric_version(suite)
+    assert v_with_rubric != v_before
+    (suite / "rubric.py").write_text("def score(task, workdir, mode): return {}\n")
+    assert rubric_version(suite) != v_with_rubric  # an edit to the rubric changes it
+    (suite / "refs.txt").write_text("not part of the contract")
+    assert rubric_version(suite) == rubric_version(suite)
+
+
+def test_batch_report_is_stamped_with_rubric_version(tmp_path):
+    suite = tmp_path / "suite"
+    suite.mkdir()
+    (suite / "scoring.md").write_text('```json\n{"default_mode": "exact"}\n```\n')
+    batch = tmp_path / "batch"
+    make_ws(batch, "t1_s0", {"id": "t1", "scoring": {"expected": "good"}}, "good")
+    proc = subprocess.run(
+        [sys.executable, str(HARNESS / "score.py"), "--suite", str(suite),
+         "--batch", str(batch)], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout)["rubric_version"] == rubric_version(suite)
 
 
 def test_scoring_error_exits_2_not_zero_score(tmp_path):

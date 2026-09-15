@@ -11,6 +11,9 @@ Checks, in order:
               commits (subject contains 'epoch') or the initial import
   reproposal  no rejected edit rendering re-appears verbatim in a later
               discard row of the same epoch
+  rubric      every scores.json under runs/<tag>/ is stamped with the
+              suite's current rubric_version (the scoring contract never
+              changed mid-run, so every gate decision compared like with like)
 
 Usage: audit_run.py --run runs/<tag> --suite tasks/<skill> --skill skills/<skill>/SKILL.md
                     [--results results.tsv] [--best-tag best/<skill>] [--authoritative-mode full]
@@ -24,6 +27,8 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+
+from score import rubric_version
 
 PROTECTED_RE = re.compile(
     r"<!--\s*PROTECTED:([A-Z_]+):START\s*-->[\s\S]*?<!--\s*PROTECTED:\1:END\s*-->")
@@ -155,6 +160,19 @@ def audit_reproposal(rows: list[dict]) -> list[str]:
     return failures
 
 
+def audit_rubric(run_dir: Path, suite: Path) -> list[str]:
+    failures = []
+    current = rubric_version(suite)
+    for report_path in sorted(run_dir.rglob("scores.json")):
+        stamp = json.loads(report_path.read_text(encoding="utf-8")).get("rubric_version")
+        where = report_path.relative_to(run_dir)
+        if stamp is None:
+            failures.append(f"rubric: {where} is unstamped (scored before rubric_version existed)")
+        elif stamp != current:
+            failures.append(f"rubric: {where} scored under {stamp}, suite is now {current}")
+    return failures
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--run", required=True)
@@ -174,8 +192,9 @@ def main() -> None:
     failures = (audit_leakage(Path(args.run), Path(args.suite))
                 + audit_monotone(rows, args.best_tag, args.authoritative_mode, repo)
                 + audit_protected(Path(args.skill), repo, since)
-                + audit_reproposal(rows))
-    report = {"audits": ["leakage", "monotone", "protected", "reproposal"],
+                + audit_reproposal(rows)
+                + audit_rubric(Path(args.run), Path(args.suite)))
+    report = {"audits": ["leakage", "monotone", "protected", "reproposal", "rubric"],
               "status": "pass" if not failures else "fail",
               "failures": failures}
     print(json.dumps(report, indent=2))

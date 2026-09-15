@@ -154,6 +154,17 @@ def test_cursor_backend_honors_model_env(monkeypatch):
     assert cmd[cmd.index("--model") + 1] == "claude-sonnet-5-low"
 
 
+def test_positional_prompt_backends_are_dash_safe():
+    """Injected skill text usually opens with '---' frontmatter; backends
+    that take the prompt positionally must fence it behind '--' or the CLI
+    parses it as an option (cursor did, 2026-08-06)."""
+    for backend in ("cursor", "codex", "opencode"):
+        cmd = BACKENDS[backend]("do the task", "---\nname: x\n---\nbody", [])
+        payload = cmd[-1]
+        assert payload.startswith("---")
+        assert cmd[cmd.index("--") + 1] == payload
+
+
 def test_smoke_tools_come_from_suite_config(tmp_path):
     # The harness hardcodes no tool checks; the suite's scoring.md
     # `smoke_tools` list owns them (generalization: a non-media suite
