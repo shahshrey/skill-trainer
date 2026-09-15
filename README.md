@@ -143,18 +143,11 @@ the skills they train live in your working copy; `tasks/` and `skills/`
 are gitignored here by design.
 
 **Step 1: find the tasks.** The best training tasks are the requests you
-already make of your agent over and over. `harness/harvest.py` mines your
-local transcripts (Claude Code, Codex, Cursor) for prompts that recur
-across sessions and writes them out as candidates:
-
-```bash
-.venv/bin/python harness/harvest.py --source all --project <your-repo-path> --out candidates.jsonl
-```
-
-Each candidate carries the representative prompt, how often it recurred,
-a guess at whether the agent got it right (from your follow-up message),
-and file references back to the sessions. It only reads transcripts; you
-curate the candidates into `train.jsonl` and `val.jsonl` yourself.
+already make of your agent over and over, especially the ones it gets
+wrong. Write those down as prompts, and for each one decide what a correct
+answer must contain. That second part is the work: a task without a
+checkable outcome cannot gate an edit, and nothing in this framework can
+invent it for you.
 
 **Step 2: shape the suite.** The bundled
 [`examples/mock-demo`](examples/mock-demo) is a complete working suite to
