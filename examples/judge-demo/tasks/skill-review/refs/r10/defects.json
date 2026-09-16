@@ -1,0 +1,22 @@
+{
+  "id": "r10",
+  "dirname": "markdown-lint",
+  "topic": "Lint and auto-fix Markdown documents",
+  "defects": [
+    {
+      "code": "name-invalid",
+      "location": "SKILL.md frontmatter line 2",
+      "detail": "The skill name 'markdown lint' contains a space, violating the [a-z0-9-] pattern for valid names."
+    },
+    {
+      "code": "obvious-explanation",
+      "location": "SKILL.md lines 8-9",
+      "detail": "A paragraph explaining what Markdown headings are (starting with 'Markdown headings are created using...') is included. This explains a fundamental concept that any competent agent knows."
+    },
+    {
+      "code": "missing-script",
+      "location": "SKILL.md line ~37",
+      "detail": "The Quick Start section references 'scripts/fix_tables.py' in the command, but this script does not exist in the scripts/ directory (only lint.py is present)."
+    }
+  ]
+}

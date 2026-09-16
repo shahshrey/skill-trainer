@@ -1,0 +1,22 @@
+{
+  "id": "r08",
+  "dirname": "slack-notify",
+  "topic": "Post build and deploy notifications to Slack channels",
+  "defects": [
+    {
+      "code": "desc-too-long",
+      "location": "SKILL.md frontmatter, description field",
+      "detail": "Description exceeds 1024 characters with rambling detail about features, integrations, and customization options; should be concise summary instead"
+    },
+    {
+      "code": "inconsistent-terms",
+      "location": "SKILL.md body, references to Slack destinations",
+      "detail": "Mixes terminology: 'channels', 'rooms', and 'conversation' refer to the same concept (Slack channels) but are used inconsistently throughout the text"
+    },
+    {
+      "code": "missing-script",
+      "location": "SKILL.md Advanced section, final paragraph",
+      "detail": "References scripts/post_message.py in the text but the file does not exist"
+    }
+  ]
+}

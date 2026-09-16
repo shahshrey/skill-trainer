@@ -1,12 +1,12 @@
 # Framework/task boundary (PROGRAM.md §8): task suites and trainable skills
 # live in your own task repo, not here.
-tasks/
-skills/
+/tasks/
+/skills/
 
 # Per-run artifacts and training logs
 runs/*
 !runs/CONFIG_TEMPLATE.md
-results.tsv
+/results.tsv
 
 # Python
 .venv/

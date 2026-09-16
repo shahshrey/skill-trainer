@@ -1,0 +1,22 @@
+{
+  "id": "r06",
+  "dirname": "changelog-writer",
+  "topic": "Write a changelog entry from merged pull requests",
+  "defects": [
+    {
+      "code": "name-reserved",
+      "location": "SKILL.md frontmatter, name field",
+      "detail": "Name is 'claude-changelog-writer' which contains the reserved word 'claude'"
+    },
+    {
+      "code": "no-quick-start",
+      "location": "SKILL.md body structure",
+      "detail": "The edge case details about squash merges, reverts, and monorepos (30+ lines) appear before the Overview and Quick start sections, burying actionable guidance"
+    },
+    {
+      "code": "magic-number",
+      "location": "SKILL.md Category defaults section",
+      "detail": "States 'Group at most 17 PRs per section' with no explanation for why 17 was chosen"
+    }
+  ]
+}

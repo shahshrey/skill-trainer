@@ -1,0 +1,27 @@
+{
+  "id": "r14",
+  "dirname": "log-analyzer",
+  "topic": "Find error patterns and root causes in application logs",
+  "defects": [
+    {
+      "code": "name-reserved",
+      "location": "SKILL.md frontmatter name field",
+      "detail": "The name is 'anthropic-log-analyzer' which contains the reserved word 'anthropic'"
+    },
+    {
+      "code": "options-no-default",
+      "location": "SKILL.md Search tool options section, around line ~27",
+      "detail": "Lists grep, ripgrep, or lnav as options but does not specify which is the default"
+    },
+    {
+      "code": "obvious-explanation",
+      "location": "SKILL.md Understanding timestamps section, around line ~21",
+      "detail": "Contains a paragraph explaining what a timestamp is, which any competent agent already understands"
+    },
+    {
+      "code": "extraneous-files",
+      "location": "CHANGELOG.md in the skill directory",
+      "detail": "Includes user-facing documentation (CHANGELOG.md with installation instructions) that should not be part of the skill directory"
+    }
+  ]
+}

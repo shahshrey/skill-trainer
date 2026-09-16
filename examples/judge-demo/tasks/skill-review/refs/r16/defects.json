@@ -1,0 +1,22 @@
+{
+  "id": "r16",
+  "dirname": "test-runner",
+  "topic": "Run the right subset of a test suite for a change and report failures",
+  "defects": [
+    {
+      "code": "desc-too-long",
+      "location": "SKILL.md frontmatter description field",
+      "detail": "Description exceeds 1024 characters (measured at 1087 characters), violating the maximum length requirement"
+    },
+    {
+      "code": "no-quick-start",
+      "location": "SKILL.md body structure",
+      "detail": "Body opens with 'Edge cases and advanced topics' section containing 32 lines of discussion about flaky tests, sharding, and caching before the Quick start section appears (around line ~50)"
+    },
+    {
+      "code": "undocumented-binary",
+      "location": "SKILL.md sections: Quick start (pytest-xdist command, ~line 50) and Reporting failures (gh command, ~line 65)",
+      "detail": "Commands use 'pytest-xdist' and 'gh' binaries without documenting them as external dependencies or explaining how to install them"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "id": "r03",
+  "dirname": "git-release",
+  "topic": "Cut a versioned release with tags, changelog and GitHub release notes",
+  "defects": [
+    {
+      "code": "nested-refs",
+      "location": "SKILL.md line 18 and references/release-process.md line 20",
+      "detail": "SKILL.md links to references/release-process.md which itself links to references/versioning-rules.md; the semver bump rules should be directly in SKILL.md or only in versioning-rules.md, not nested across multiple files"
+    },
+    {
+      "code": "time-sensitive",
+      "location": "SKILL.md line 22-23",
+      "detail": "section contains dated conditional: 'Before March 2026 use the legacy gh release syntax'; dated conditions become obsolete and cause confusion"
+    },
+    {
+      "code": "inconsistent-terms",
+      "location": "SKILL.md lines 8, 13, and 21",
+      "detail": "inconsistent terminology: 'release tags' (line 8), 'version tag' (line 21), and 'release tag' (line 13) used interchangeably for the same concept"
+    }
+  ]
+}

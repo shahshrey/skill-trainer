@@ -1,0 +1,27 @@
+{
+  "id": "r04",
+  "dirname": "docker-deploy",
+  "topic": "Build and deploy a service as a Docker container to a remote host",
+  "defects": [
+    {
+      "code": "extraneous-files",
+      "location": "README.md and CHANGELOG.md in skill root",
+      "detail": "user-facing documentation files (README.md with install instructions and CHANGELOG.md) should not be included in the skill directory; they belong in project documentation"
+    },
+    {
+      "code": "obvious-explanation",
+      "location": "SKILL.md Understanding Docker containers section, lines 10-12",
+      "detail": "paragraph explains what a container image is, a concept any competent developer already understands; this is obvious technical knowledge that wastes space"
+    },
+    {
+      "code": "body-second-person",
+      "location": "SKILL.md Deployment workflow section, lines 15-23",
+      "detail": "body uses second-person voice 'You should' in three sentences (lines 15, 17, 19); should use third-person imperative or passive voice instead"
+    },
+    {
+      "code": "undocumented-binary",
+      "location": "SKILL.md Build configuration section, line 29",
+      "detail": "deployment commands use 'jq' and 'ssh' binaries with no documentation that these are required dependencies; no mention in Prerequisites section"
+    }
+  ]
+}

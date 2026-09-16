@@ -1,0 +1,27 @@
+{
+  "id": "r09",
+  "dirname": "sql-migrate",
+  "topic": "Write and apply database schema migrations safely",
+  "defects": [
+    {
+      "code": "nested-refs",
+      "location": "SKILL.md line ~28 and references/migration-checklist.md",
+      "detail": "SKILL.md links to references/migration-checklist.md, which in turn links to references/locking-rules.md. The table-locking guidance that appears in the body (lines 37-45 of SKILL.md) should only appear in locking-rules.md, creating an unnecessary nested reference chain."
+    },
+    {
+      "code": "options-no-default",
+      "location": "SKILL.md line ~16",
+      "detail": "The Migration Frameworks section lists 'Alembic, Flyway, or raw SQL scripts' without stating which is the default or recommended choice for the team."
+    },
+    {
+      "code": "body-second-person",
+      "location": "SKILL.md lines 24, 30, and 41",
+      "detail": "Body text uses second-person imperative voice: 'You should choose', 'You should plan', 'You should always have' violates the third-person policy for skill bodies."
+    },
+    {
+      "code": "time-sensitive",
+      "location": "SKILL.md line ~27",
+      "detail": "Text contains 'Until June 2026 the staging cluster runs Postgres 14', a dated conditional that will become stale and misleading."
+    }
+  ]
+}

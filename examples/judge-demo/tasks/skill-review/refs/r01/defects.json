@@ -1,0 +1,27 @@
+{
+  "id": "r01",
+  "dirname": "pdf-extract",
+  "topic": "Extract text and tables from PDF files",
+  "defects": [
+    {
+      "code": "name-invalid",
+      "location": "SKILL.md frontmatter, line 2",
+      "detail": "name uses 'PDF_Extract' with uppercase letters and underscores; must be lowercase with hyphens only"
+    },
+    {
+      "code": "desc-second-person",
+      "location": "SKILL.md frontmatter, line 3",
+      "detail": "description starts with 'You can extract' using second person; must use third person with 'what' and 'when' clauses"
+    },
+    {
+      "code": "windows-path",
+      "location": "SKILL.md Quick Start section, line 13",
+      "detail": "command uses backslash path 'scripts\\extract_text.py'; must use forward slashes for cross-platform compatibility"
+    },
+    {
+      "code": "missing-script",
+      "location": "SKILL.md Quick Start section, line 18",
+      "detail": "command references 'scripts/extract_tables.py' which does not exist; file must be created or reference removed"
+    }
+  ]
+}
