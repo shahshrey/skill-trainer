@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/banner.png" width="900px" alt="skill-trainer: stop writing skills, start training them">
+  <img src="assets/banner.png" width="900px" alt="skill-trainer: stop writing skills, start training them">
 </p>
 
 <div align="center">
@@ -84,7 +84,7 @@ pure-noise suite the trainer correctly accepts ~nothing:
 ## How it works
 
 <p align="center">
-  <img src="docs/training-loop.gif" width="900px" alt="Animated diagram of one training step: the editor agent proposes bounded edits, the lint gate checks them, the candidate is committed, parallel rollout workers run held-out val tasks, score.py produces a number, and the verdict either keeps the edit (branch advances) or rejects it (git reset --hard, edit goes to the rejected buffer)">
+  <img src="assets/training-loop.gif" width="900px" alt="Animated diagram of one training step: the editor agent proposes bounded edits, the lint gate checks them, the candidate is committed, parallel rollout workers run held-out val tasks, score.py produces a number, and the verdict either keeps the edit (branch advances) or rejects it (git reset --hard, edit goes to the rejected buffer)">
 </p>
 
 1. An editor agent proposes a small set of bounded edits to `SKILL.md`,
