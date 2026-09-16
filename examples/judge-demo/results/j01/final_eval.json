@@ -1,0 +1,170 @@
+{
+  "haiku_test_base": {
+    "aggregate": {
+      "n": 8,
+      "hard": 0.25,
+      "soft": 0.5271,
+      "mixed": 0.3885
+    },
+    "tasks": {
+      "r13_s0": {
+        "hard": 0,
+        "soft": 0.2983
+      },
+      "r13_s1": {
+        "hard": 0,
+        "soft": 0.31
+      },
+      "r14_s0": {
+        "hard": 0,
+        "soft": 0.475
+      },
+      "r14_s1": {
+        "hard": 0,
+        "soft": 0.3017
+      },
+      "r15_s0": {
+        "hard": 1,
+        "soft": 0.7717
+      },
+      "r15_s1": {
+        "hard": 1,
+        "soft": 0.825
+      },
+      "r16_s0": {
+        "hard": 0,
+        "soft": 0.665
+      },
+      "r16_s1": {
+        "hard": 0,
+        "soft": 0.57
+      }
+    }
+  },
+  "haiku_test_trained": {
+    "aggregate": {
+      "n": 8,
+      "hard": 0.5,
+      "soft": 0.7192,
+      "mixed": 0.6096
+    },
+    "tasks": {
+      "r13_s0": {
+        "hard": 1,
+        "soft": 0.9233
+      },
+      "r13_s1": {
+        "hard": 0,
+        "soft": 0.6297
+      },
+      "r14_s0": {
+        "hard": 0,
+        "soft": 0.6517
+      },
+      "r14_s1": {
+        "hard": 1,
+        "soft": 0.6475
+      },
+      "r15_s0": {
+        "hard": 1,
+        "soft": 0.7467
+      },
+      "r15_s1": {
+        "hard": 1,
+        "soft": 0.9933
+      },
+      "r16_s0": {
+        "hard": 0,
+        "soft": 0.5367
+      },
+      "r16_s1": {
+        "hard": 0,
+        "soft": 0.625
+      }
+    }
+  },
+  "grok_valtest_base": {
+    "aggregate": {
+      "n": 8,
+      "hard": 0.5,
+      "soft": 0.7412,
+      "mixed": 0.6206
+    },
+    "tasks": {
+      "r09_s0": {
+        "hard": 0,
+        "soft": 0.6525
+      },
+      "r10_s0": {
+        "hard": 1,
+        "soft": 0.8567
+      },
+      "r11_s0": {
+        "hard": 0,
+        "soft": 0.7308
+      },
+      "r12_s0": {
+        "hard": 1,
+        "soft": 0.805
+      },
+      "r13_s0": {
+        "hard": 1,
+        "soft": 0.81
+      },
+      "r14_s0": {
+        "hard": 1,
+        "soft": 0.8317
+      },
+      "r15_s0": {
+        "hard": 0,
+        "soft": 0.6433
+      },
+      "r16_s0": {
+        "hard": 0,
+        "soft": 0.6
+      }
+    }
+  },
+  "grok_valtest_trained": {
+    "aggregate": {
+      "n": 8,
+      "hard": 0.375,
+      "soft": 0.7596,
+      "mixed": 0.5673
+    },
+    "tasks": {
+      "r09_s0": {
+        "hard": 1,
+        "soft": 0.6967
+      },
+      "r10_s0": {
+        "hard": 0,
+        "soft": 0.85
+      },
+      "r11_s0": {
+        "hard": 0,
+        "soft": 0.6508
+      },
+      "r12_s0": {
+        "hard": 1,
+        "soft": 0.8933
+      },
+      "r13_s0": {
+        "hard": 1,
+        "soft": 0.8733
+      },
+      "r14_s0": {
+        "hard": 0,
+        "soft": 0.7225
+      },
+      "r15_s0": {
+        "hard": 0,
+        "soft": 0.6117
+      },
+      "r16_s0": {
+        "hard": 0,
+        "soft": 0.7783
+      }
+    }
+  }
+}
