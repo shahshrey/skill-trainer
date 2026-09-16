@@ -121,6 +121,11 @@ a. **Evidence.** Roll out the epoch's fixed train sample (M tasks, sampled
    branch tip. Receipts produced under any other skill version are stale;
    refresh after every accepted edit. Collect: capped receipts, the recent
    `discard` rows from results.tsv (the rejected-edit buffer), and META.md.
+   Judge-mode suites (`scoring.md` default_mode `judge`): each scored
+   workspace holds `judge.json`; put the first sample's `reasoning` and
+   its per-criterion `evidence` lines into the receipt's diagnostic
+   excerpt. That text is the localized feedback (§5c); the `crit:*`
+   check names alone are verdicts, not feedback.
 b. **Editors.** Fill `prompts/editor_error.md` with the failed receipts
    (and `prompts/editor_success.md` with successful ones, when both exist),
    dispatch, and pool the returned edits. `{FAILURE_CLASS_GUIDE}` is

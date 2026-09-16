@@ -35,7 +35,8 @@ Mock backend (for testing the trainer itself): a task carries
 
 --smoke verifies: suite requirements.txt deps importable, every binary in
 the suite's scoring.md `smoke_tools` list on PATH, chromium installed
-(when playwright is a dep), backend CLI on PATH.
+(when playwright is a dep), backend CLI on PATH, and for judge-mode
+suites the judge readiness report (deps, key, judge.md, references).
 Stdlib-only; no network calls of its own.
 """
 from __future__ import annotations
@@ -52,7 +53,8 @@ import sys
 import time
 from pathlib import Path
 
-from score import suite_config
+import judge  # stdlib at import time; LangChain loads only inside a judge call
+from score import scoring_mode, suite_config
 
 # train.sh exports these so every rollout in a batch runs the same model.
 MODEL_VAR = "SKILL_TRAINER_MODEL"
@@ -203,6 +205,16 @@ def suite_smoke_tools(suite: Path) -> list[str]:
         return []
 
 
+def suite_uses_judge(suite: Path) -> bool:
+    """True when the suite default or any task row selects the judge mode."""
+    try:
+        config = suite_config(suite)
+    except (json.JSONDecodeError, AttributeError):
+        return False
+    return (config.get("default_mode") == "judge"
+            or any(scoring_mode(t, config) == "judge" for t in judge.suite_tasks(suite)))
+
+
 def requirement_names(requirements: Path) -> list[str]:
     """Package names from a pip requirements file (specifiers stripped)."""
     names = []
@@ -227,6 +239,16 @@ def smoke(suite: Path | None, backend: str | None) -> int:
                 checks.append((f"dep:{name}", False, str(exc)))
         for tool in suite_smoke_tools(suite):
             checks.append((f"tool:{tool}", shutil.which(tool) is not None, "not on PATH"))
+    if suite is not None and suite_uses_judge(suite):
+        # The judge needs LangChain, a MiniMax key, judge.md, and every
+        # task reference resolvable; judge.py owns that report.
+        report = judge.check(suite)
+        for name in ("deps", "key", "judge_md"):
+            checks.append((f"judge:{name}", bool(report[name]), "; ".join(report["warnings"])))
+        missing = report["tasks"]["missing_reference"]
+        checks.append(("judge:references", not missing,
+                       f"missing reference for {missing}" if missing else ""))
+        judge.print_check(report)
     if ("dep:playwright", True, "") in checks:
         try:
             from playwright.sync_api import sync_playwright
@@ -289,7 +311,9 @@ def main() -> None:
     for rel in task.get("files", []):
         src = Path(args.suite) / rel if args.suite else Path(rel)
         dest = workdir / Path(rel).name
-        if src.exists() and not dest.exists():
+        if src.is_dir():  # a whole fixture package (e.g. a skill dir to review)
+            shutil.copytree(src, dest, dirs_exist_ok=True)
+        elif src.exists() and not dest.exists():
             shutil.copy(src, dest)
 
     prompt_append = ""
@@ -310,10 +334,14 @@ def main() -> None:
         prompt = task.get(f"prompt_{args.mode}") or task.get("prompt")
         if not prompt:
             raise SystemExit(f"task {task.get('id')!r} has no prompt/prompt_{args.mode} field")
-        prompt = (f"{prompt}\n\nThe skill directory (with any supporting "
-                  f"subdirectories it ships, e.g. scripts/, assets/, examples/, "
-                  f"references/) is at: {skill_path.parent}\n"
-                  f"Work inside the current directory.{prompt_append}")
+        # Name the skill's own package unambiguously: a skill whose subject
+        # is other skills (a reviewer, a linter) otherwise reads "the skill
+        # directory" as the thing to work on and reviews itself.
+        prompt = (f"{prompt}\n\nThe instructions you are following come from the "
+                  f"skill package at: {skill_path.parent} (its supporting files, e.g. "
+                  f"scripts/, assets/, examples/, references/, live there). That package "
+                  f"is your tooling, not the subject of this task. Work inside the "
+                  f"current directory.{prompt_append}")
         code, duration = run_agent(args.backend, prompt, skill_text,
                                    args.agent_arg, workdir, args.timeout)
 
