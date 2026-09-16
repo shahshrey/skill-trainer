@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import judge
-from score import RUBRIC_FILES, rubric_version, score_task
+from score import RUBRIC_FILES, rubric_version, score_task, suite_config
 
 HARNESS = Path(__file__).resolve().parent.parent / "harness"
 
@@ -37,8 +37,8 @@ def make_ws(tmp_path, name, task, output):
 
 # --- parsing -----------------------------------------------------------------
 
-def test_parse_prefers_tool_call_arguments():
-    raw = {"tool_args": verdict(0.8, True), "content": "ignored"}
+def test_parse_prefers_structured_output():
+    raw = {"parsed": verdict(0.8, True), "content": "ignored"}
     v = judge.parse_verdict(raw)
     assert v["overall"] == 0.8 and v["passed"] is True
     assert v["criteria"][0]["name"] == "recall"
@@ -47,13 +47,13 @@ def test_parse_prefers_tool_call_arguments():
 def test_parse_falls_back_to_json_in_content_and_strips_think():
     content = ("<think>let me reason\nabout {braces} here</think>\n\n"
                "Here is my verdict:\n" + json.dumps(verdict(0.4, False)) + "\nthanks")
-    v = judge.parse_verdict({"tool_args": None, "content": content})
+    v = judge.parse_verdict({"parsed": None, "content": content})
     assert v["overall"] == 0.4 and v["passed"] is False
 
 
 def test_parse_rejects_garbage():
     with pytest.raises(ValueError):
-        judge.parse_verdict({"tool_args": None, "content": "<think>hmm</think> no json here"})
+        judge.parse_verdict({"parsed": None, "content": "<think>hmm</think> no json here"})
 
 
 def test_validate_clamps_scores_and_coerces_passed():
@@ -116,7 +116,7 @@ def test_judge_output_single_sample(tmp_path):
 
     def fake(messages, cfg, key):
         calls.append(messages)
-        return {"tool_args": verdict(0.9, True, {"recall": 1.0, "precision": 0.8}), "content": ""}
+        return {"parsed": verdict(0.9, True, {"recall": 1.0, "precision": 0.8}), "content": ""}
 
     r = judge.judge_output({"id": "t1", "prompt": "p", "reference_text": "g"}, ws, suite,
                            {"judge": {}}, call_model=fake, api_key="k")
@@ -134,10 +134,10 @@ def test_three_samples_average_soft_and_majority_hard(tmp_path):
     answers = iter([verdict(0.6, True), verdict(0.3, False), verdict(0.9, True)])
 
     def fake(messages, cfg, key):
-        return {"tool_args": next(answers), "content": ""}
+        return {"parsed": next(answers), "content": ""}
 
     r = judge.judge_output({"id": "t1", "prompt": "p"}, ws, suite,
-                           judge.suite_config(suite), call_model=fake, api_key="k")
+                           suite_config(suite), call_model=fake, api_key="k")
     assert r["soft"] == 0.6
     assert r["hard"] == 1
     assert "ref:rubric" in r["checks"]
@@ -148,7 +148,7 @@ def test_majority_tie_fails_closed(tmp_path):
     ws = make_ws(tmp_path, "t1_s0", {"id": "t1", "prompt": "p"}, "out")
     answers = iter([verdict(0.6, True), verdict(0.6, False)])
     r = judge.judge_output({"id": "t1", "prompt": "p"}, ws, suite, {"judge": {"samples": 2}},
-                           call_model=lambda m, c, k: {"tool_args": next(answers), "content": ""},
+                           call_model=lambda m, c, k: {"parsed": next(answers), "content": ""},
                            api_key="k")
     assert r["hard"] == 0
 
@@ -159,7 +159,7 @@ def test_criteria_weights_override_model_overall(tmp_path):
     v = verdict(0.1, True, {"recall": 1.0, "precision": 0.0})  # model says 0.1
     cfg = {"judge": {"criteria_weights": {"recall": 0.75, "precision": 0.25}}}
     r = judge.judge_output({"id": "t1", "prompt": "p"}, ws, suite, cfg,
-                           call_model=lambda m, c, k: {"tool_args": v, "content": ""}, api_key="k")
+                           call_model=lambda m, c, k: {"parsed": v, "content": ""}, api_key="k")
     assert r["soft"] == 0.75
 
 
@@ -170,7 +170,7 @@ def test_verdicts_are_cached_per_workspace_and_invalidated_on_change(tmp_path):
 
     def fake(messages, cfg, key):
         n["calls"] += 1
-        return {"tool_args": verdict(0.5, False), "content": ""}
+        return {"parsed": verdict(0.5, False), "content": ""}
 
     task = {"id": "t1", "prompt": "p"}
     judge.judge_output(task, ws, suite, {"judge": {}}, call_model=fake, api_key="k")
@@ -187,12 +187,12 @@ def test_verdicts_are_cached_per_workspace_and_invalidated_on_change(tmp_path):
 def test_malformed_reply_gets_one_retry_then_raises(tmp_path):
     suite = make_suite(tmp_path)
     ws = make_ws(tmp_path, "t1_s0", {"id": "t1", "prompt": "p"}, "out")
-    replies = iter([{"tool_args": None, "content": "garbage"},
-                    {"tool_args": verdict(0.7, True), "content": ""}])
+    replies = iter([{"parsed": None, "content": "garbage"},
+                    {"parsed": verdict(0.7, True), "content": ""}])
     r = judge.judge_output({"id": "t1", "prompt": "p"}, ws, suite, {"judge": {}},
                            call_model=lambda m, c, k: next(replies), api_key="k")
     assert r["soft"] == 0.7
-    always_bad = lambda m, c, k: {"tool_args": None, "content": "garbage"}  # noqa: E731
+    always_bad = lambda m, c, k: {"parsed": None, "content": "garbage"}  # noqa: E731
     ws2 = make_ws(tmp_path, "t2_s0", {"id": "t2", "prompt": "p"}, "out")
     with pytest.raises(ValueError):
         judge.judge_output({"id": "t2", "prompt": "p"}, ws2, suite, {"judge": {}},
@@ -237,7 +237,7 @@ def test_score_task_judge_mode_uses_judge_module(tmp_path, monkeypatch):
     task = {"id": "t1", "prompt": "p", "scoring": {"mode": "judge"}}
     ws = make_ws(tmp_path, "t1_s0", task, "some output")
     monkeypatch.setattr(judge, "call_model",
-                        lambda m, c, k: {"tool_args": verdict(0.8, True), "content": ""})
+                        lambda m, c, k: {"parsed": verdict(0.8, True), "content": ""})
     monkeypatch.setenv("MINIMAX_API_KEY", "k")
     r = score_task(task, ws, "cheap", {"default_mode": "judge", "judge": {}}, None, suite=suite)
     assert r["mode"] == "judge" and r["hard"] == 1 and r["soft"] == 0.8
@@ -279,7 +279,7 @@ def test_check_cli_exit_codes(tmp_path, monkeypatch):
                                                    "reference_text": "g"}) + "\n")
     proc = subprocess.run([sys.executable, str(HARNESS / "judge.py"), "--check",
                            "--suite", str(suite)], capture_output=True, text=True)
-    assert proc.returncode in (0, 1), proc.stderr  # 1 only when deps are missing
+    assert proc.returncode == 0, proc.stderr
     assert "dataset" in proc.stdout
     (suite / "judge.md").unlink()
     proc = subprocess.run([sys.executable, str(HARNESS / "judge.py"), "--check",

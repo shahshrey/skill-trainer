@@ -1,3 +1,2 @@
-# Development/test deps. The harness itself is stdlib-only; nothing is
-# needed during a training run.
+-r requirements.txt
 pytest==9.1.1

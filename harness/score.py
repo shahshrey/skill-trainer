@@ -16,11 +16,11 @@ default declared in the first fenced ```json block of tasks/X/scoring.md:
   command    task["scoring"]["command"] run with cwd=workdir and
              TASK_OUTPUT=<output.txt>; exit 0 -> hard 1
   rubric     tasks/X/rubric.py::score(task, workdir, mode) -> {hard, soft, checks}
-             (suite-specific deps allowed there; this harness core is stdlib)
+             (suite-specific deps allowed there)
   judge      LLM-as-judge (harness/judge.py): tasks/X/judge.md is the judge
              prompt; a task's "reference" makes it dataset-mode, none makes
              it rubric-mode. Structured verdict -> {hard, soft, checks}.
-             Needs requirements-judge.txt + a MiniMax key; see judge.py.
+             Needs a MiniMax key; see judge.py.
 
 Batch aggregates are reported overall and per task["suite"] value (e.g.
 "clone" vs "workflow-A") so the manager can apply the two-suite gate rule.
@@ -47,6 +47,8 @@ import subprocess
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+
+import judge
 
 FENCED_JSON_RE = re.compile(r"```json\s*\n([\s\S]*?)\n```")
 RUBRIC_FILES = ("scoring.md", "rubric.py", "judge.md")  # the scoring contract
@@ -101,7 +103,6 @@ def score_task(task: dict, workdir: Path, mode: str, config: dict, rubric,
     if smode == "judge":
         if suite is None:
             raise ValueError("scoring mode 'judge' needs the suite directory")
-        import judge  # noqa: PLC0415; lazy so the stdlib-only modes never pay for it
         result = judge.judge_output(task, workdir, suite, config)
         return {"hard": int(result["hard"]), "soft": round(float(result["soft"]), 4),
                 "checks": list(result["checks"]), "mode": smode}

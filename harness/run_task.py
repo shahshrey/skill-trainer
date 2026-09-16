@@ -36,8 +36,8 @@ Mock backend (for testing the trainer itself): a task carries
 --smoke verifies: suite requirements.txt deps importable, every binary in
 the suite's scoring.md `smoke_tools` list on PATH, chromium installed
 (when playwright is a dep), backend CLI on PATH, and for judge-mode
-suites the judge readiness report (deps, key, judge.md, references).
-Stdlib-only; no network calls of its own.
+suites the judge readiness report (key, judge.md, references). No
+network calls of its own.
 """
 from __future__ import annotations
 
@@ -53,8 +53,13 @@ import sys
 import time
 from pathlib import Path
 
-import judge  # stdlib at import time; LangChain loads only inside a judge call
+import judge
 from score import scoring_mode, suite_config
+
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError:  # only suites that list playwright need it; --smoke reports it
+    sync_playwright = None
 
 # train.sh exports these so every rollout in a batch runs the same model.
 MODEL_VAR = "SKILL_TRAINER_MODEL"
@@ -240,10 +245,10 @@ def smoke(suite: Path | None, backend: str | None) -> int:
         for tool in suite_smoke_tools(suite):
             checks.append((f"tool:{tool}", shutil.which(tool) is not None, "not on PATH"))
     if suite is not None and suite_uses_judge(suite):
-        # The judge needs LangChain, a MiniMax key, judge.md, and every
-        # task reference resolvable; judge.py owns that report.
+        # The judge needs a MiniMax key, judge.md, and every task reference
+        # resolvable; judge.py owns that report.
         report = judge.check(suite)
-        for name in ("deps", "key", "judge_md"):
+        for name in ("key", "judge_md"):
             checks.append((f"judge:{name}", bool(report[name]), "; ".join(report["warnings"])))
         missing = report["tasks"]["missing_reference"]
         checks.append(("judge:references", not missing,
@@ -251,7 +256,6 @@ def smoke(suite: Path | None, backend: str | None) -> int:
         judge.print_check(report)
     if ("dep:playwright", True, "") in checks:
         try:
-            from playwright.sync_api import sync_playwright
             with sync_playwright() as p:
                 ok = Path(p.chromium.executable_path).exists()
             checks.append(("chromium", ok, "run: playwright install chromium"))
