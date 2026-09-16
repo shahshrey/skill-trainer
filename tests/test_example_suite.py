@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 
 from lint_skill import lint
+from meta_eval import ABLATABLE, SLOW_RE
 from run_task import normalize, run_mock
 from score import score_task, suite_config
 
@@ -21,7 +22,6 @@ def load_jsonl(path: Path) -> list[dict]:
 
 
 def test_skill_contains_every_ablatable_rule_and_slow_update_block():
-    from meta_eval import ABLATABLE, SLOW_RE
     text = SKILL.read_text()
     for rule, line in ABLATABLE.items():
         assert line in text, f"ABLATABLE line for {rule} missing from SKILL.md"
@@ -43,7 +43,6 @@ def test_demo_tasks_all_solve_against_reference_skill():
 
 
 def test_demo_tasks_fail_with_symptom_when_their_rule_is_ablated():
-    from meta_eval import ABLATABLE
     for task in load_jsonl(DEMO / "val.jsonl"):
         rule = task["requires"][0]
         ablated = SKILL.read_text().replace(ABLATABLE[rule], "")

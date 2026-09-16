@@ -30,7 +30,6 @@ prints the per-split mode report.
 ## Run it
 
 ```bash
-.venv/bin/pip install -r requirements-judge.txt        # LangChain + OpenAI client
 echo 'MINIMAX-API-KEY=...' > .env                       # gitignored
 .venv/bin/python harness/judge.py --check --suite examples/judge-demo/tasks/skill-review
 

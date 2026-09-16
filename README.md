@@ -31,11 +31,12 @@ editor never saw, keep it only if the score strictly improves. Rejected
 edits roll back with `git reset --hard` and get fed to future editors as
 evidence of what didn't work.
 
-Zero framework dependencies. The harness is plain Python (stdlib only),
-the optimizer is a manager agent following [`PROGRAM.md`](PROGRAM.md), and
-everything that "learns" is markdown. All model work goes through the agent
-CLI you already have — no API keys beyond the CLIs themselves, billed on
-the same models and subscription your coding agent already uses.
+The harness is plain Python with one `pip install -r requirements.txt`
+(LangChain and Pydantic, for the LLM judge), the optimizer is a manager
+agent following [`PROGRAM.md`](PROGRAM.md), and everything that "learns"
+is markdown. Rollouts and editing go through the agent CLI you already
+have, billed on the same models and subscription your coding agent
+already uses; only `judge`-mode suites need an API key of their own.
 
 ## Prerequisites
 
@@ -206,9 +207,12 @@ dependency, and every reference path. `run_task.py --smoke` runs the same
 check for judge suites.
 
 The judge model is MiniMax M3 through its OpenAI-compatible API, driven by
-the LangChain SDK (`bind_tools` with a verdict schema; content JSON as the
-fallback). Install `requirements-judge.txt` into the venv and put the key
-in the repo `.env` as `MINIMAX-API-KEY=...` (or export `MINIMAX_API_KEY`).
+the LangChain SDK (`with_structured_output` over the verdict schema,
+`method="function_calling"`, the only method M3 honours; think-stripped
+content JSON as the fallback). Nothing is truncated: judge inputs go in
+whole and no output cap is sent unless the suite sets `max_tokens`. Put
+the key in the repo `.env` as `MINIMAX-API-KEY=...` (or export
+`MINIMAX_API_KEY`).
 Verdicts are cached per workspace in `judge.json`, `judge.md` is hashed
 into `rubric_version`, and `examples/judge-demo` is a complete judged suite
 that trains a skill-review skill against 16 synthetic flawed skills.

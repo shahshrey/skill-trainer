@@ -17,9 +17,9 @@ Suite contract (all under tasks/X/):
                   (score.py hashes it into rubric_version).
   scoring.md      ```json {"default_mode": "judge", "judge": {...}}```
                   judge keys (all optional): model (MiniMax-M3), base_url,
-                  samples (1), temperature (0), timeout (240), max_tokens
-                  (8000), max_attempts (3), criteria_weights {name: w},
-                  pass_threshold (0.7)
+                  samples (1), temperature (0), timeout (240), max_attempts
+                  (3), criteria_weights {name: w}, pass_threshold (0.7),
+                  max_tokens (unset: the provider's default output budget)
   task rows       "reference": "<path relative to suite>" or
                   "reference_text": "<inline>"  -> DATASET mode: the judge
                   scores closeness to what good looks like.
@@ -35,11 +35,13 @@ What "good" means, in priority order:
   ``--check`` reports which mode each task runs in and warns about (2).
 
 Transport: MiniMax M3 via its OpenAI-compatible endpoint, through the
-LangChain SDK (ChatOpenAI). The endpoint ignores response_format
-json_schema and forced tool_choice, and prefixes content with <think>
-blocks, so structured output = bind_tools(tool_choice="auto") with a
-tool-call parse, falling back to JSON extracted from the think-stripped
-content. Both paths validate against the same schema.
+LangChain SDK: ChatOpenAI.with_structured_output(JudgeVerdict,
+method="function_calling", include_raw=True), JudgeVerdict being the
+Pydantic model below. function_calling is the only method M3 honours
+(json_schema / json_mode come back prefixed with a <think> block and fail
+to parse). include_raw keeps the raw message, so when the parser yields
+nothing the think-stripped content is scanned for a JSON verdict. Both
+paths normalise through validate_verdict().
 
 Aggregation over N samples: soft = mean(overall), hard = majority(passed)
 (ties fail closed). Verdicts are cached in <workdir>/judge.json keyed by
@@ -47,9 +49,8 @@ Aggregation over N samples: soft = mean(overall), hard = majority(passed)
 batch never re-spends.
 
 API key: MINIMAX_API_KEY in the environment, else the repo .env
-(MINIMAX_API_KEY or MINIMAX-API-KEY). LangChain deps come from
-requirements-judge.txt and are imported only inside call_model(), so the
-rest of the harness stays stdlib-only.
+(MINIMAX_API_KEY or MINIMAX-API-KEY). LangChain and Pydantic come from
+requirements.txt.
 """
 from __future__ import annotations
 
@@ -63,59 +64,56 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from score import suite_config
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field
+
+import score  # module import: score imports judge too, so a from-import would be circular
 
 DEFAULT_BASE_URL = "https://api.minimax.io/v1"
 DEFAULT_MODEL = "MiniMax-M3"
 KEY_NAMES = ("MINIMAX_API_KEY", "MINIMAX-API-KEY")
 THINK_RE = re.compile(r"<think>[\s\S]*?</think>\s*", re.IGNORECASE)
-INPUT_CAP = 16000  # chars per judge input file; keeps the prompt bounded
-
 DEFAULTS = {"model": DEFAULT_MODEL, "base_url": DEFAULT_BASE_URL, "samples": 1,
-            "temperature": 0.0, "timeout": 240, "max_tokens": 8000, "max_attempts": 3,
+            "temperature": 0.0, "timeout": 240, "max_tokens": None, "max_attempts": 3,
             "pass_threshold": 0.7, "criteria_weights": None}
 
-VERDICT_TOOL = {
-    "type": "function",
-    "function": {
-        "name": "record_verdict",
-        "description": "Record the structured verdict for the output under evaluation.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "criteria": {
-                    "type": "array",
-                    "description": "One entry per criterion named in the rubric.",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {"type": "string"},
-                            "score": {"type": "number", "description": "0.0 to 1.0"},
-                            "evidence": {"type": "string",
-                                         "description": "What in the output earned this score."},
-                        },
-                        "required": ["name", "score", "evidence"],
-                    },
-                },
-                "overall": {"type": "number", "description": "0.0 to 1.0"},
-                "passed": {"type": "boolean"},
-                "reasoning": {"type": "string",
-                              "description": "Two to five sentences; name the biggest gap."},
-            },
-            "required": ["criteria", "overall", "passed", "reasoning"],
-        },
-    },
-}
 
-SYSTEM_SUFFIX = """
+class CriterionScore(BaseModel):
+    """One rubric criterion, scored against the output under evaluation."""
+
+    name: str = Field(description="The criterion's name exactly as the rubric writes it.")
+    score: float = Field(ge=0.0, le=1.0, description=(
+        "How fully the output meets this criterion: 0.0 (not at all) to 1.0 (completely)."))
+    evidence: str = Field(description=(
+        "What in the output earned this score: quote it or point to it, so a reader "
+        "can check the score without re-reading everything."))
+
+
+class JudgeVerdict(BaseModel):
+    """The structured verdict for the output under evaluation."""
+
+    criteria: list[CriterionScore] = Field(description=(
+        "One entry per criterion named in the rubric: none skipped, none invented."))
+    overall: float = Field(ge=0.0, le=1.0, description=(
+        "The weighted combination of the criterion scores as the rubric defines it, "
+        "0.0 to 1.0."))
+    passed: bool = Field(description="Whether the output meets the rubric's pass rule.")
+    reasoning: str = Field(description=(
+        "Two to five sentences naming the biggest gap between this output and what "
+        "good looks like for the task."))
+
+
+SYSTEM_SUFFIX = f"""
 
 ## Verdict protocol
 
-Call the `record_verdict` tool exactly once with your verdict. Score every
-criterion named above from 0.0 to 1.0 and quote the evidence. `overall` is
-the weighted combination the rubric describes; `passed` follows the
-rubric's pass rule. If you cannot call the tool, reply with ONLY a JSON
-object with the same fields (criteria, overall, passed, reasoning).
+Call the `{JudgeVerdict.__name__}` tool exactly once with your verdict. Score
+every criterion named above from 0.0 to 1.0 and quote the evidence.
+`overall` is the weighted combination the rubric describes; `passed`
+follows the rubric's pass rule. If you cannot call the tool, reply with
+ONLY a JSON object with the same fields (criteria, overall, passed,
+reasoning).
 """
 
 
@@ -182,16 +180,13 @@ def resolve_reference(task: dict, suite: Path) -> str | None:
 
 
 def collect_inputs(task: dict, workdir: Path) -> dict[str, str]:
-    """{relative path: content} for every judge_inputs glob, capped."""
+    """{relative path: content} for every judge_inputs glob."""
     found: dict[str, str] = {}
     for pattern in task.get("judge_inputs") or []:
         for hit in sorted(glob.glob(str(workdir / pattern), recursive=True)):
             p = Path(hit)
             if p.is_file():
-                text = p.read_text(encoding="utf-8", errors="replace")
-                if len(text) > INPUT_CAP:
-                    text = text[:INPUT_CAP] + f"\n... [truncated at {INPUT_CAP} chars]"
-                found[str(p.relative_to(workdir))] = text
+                found[str(p.relative_to(workdir))] = p.read_text(encoding="utf-8", errors="replace")
     return found
 
 
@@ -218,30 +213,25 @@ def build_messages(rubric: str, task: dict, output: str, reference: str | None,
 # --- model call (LangChain; the only non-stdlib code path) ---------------------
 
 def make_llm(cfg: dict, api_key: str):
-    from langchain_openai import ChatOpenAI  # noqa: PLC0415 (lazy: optional dep)
+    max_tokens = cfg.get("max_tokens")
     llm = ChatOpenAI(model=cfg["model"], base_url=cfg["base_url"], api_key=api_key,
                      temperature=float(cfg["temperature"]), timeout=int(cfg["timeout"]),
-                     max_tokens=int(cfg["max_tokens"]), max_retries=2)
-    # MiniMax rejects a forced tool_choice; "auto" reliably yields the call.
-    return llm.bind_tools([VERDICT_TOOL], tool_choice="auto")
+                     max_tokens=int(max_tokens) if max_tokens else None, max_retries=2)
+    return llm.with_structured_output(JudgeVerdict, method="function_calling", include_raw=True)
 
 
 def call_model(messages: tuple[str, str], cfg: dict, api_key: str) -> dict:
-    """{"tool_args": dict | None, "content": str} from one model round-trip."""
-    from langchain_core.messages import HumanMessage, SystemMessage  # noqa: PLC0415
+    """{"parsed": dict | None, "content": str} from one model round-trip."""
     system, user = messages
-    resp = make_llm(cfg, api_key).invoke([SystemMessage(content=system),
-                                          HumanMessage(content=user)])
-    tool_args = None
-    for call in getattr(resp, "tool_calls", None) or []:
-        if call.get("name") == VERDICT_TOOL["function"]["name"]:
-            tool_args = call.get("args")
-            break
-    content = resp.content
+    out = make_llm(cfg, api_key).invoke([SystemMessage(content=system),
+                                         HumanMessage(content=user)])
+    content = out["raw"].content
     if isinstance(content, list):  # some providers return content parts
         content = "".join(part.get("text", "") if isinstance(part, dict) else str(part)
                           for part in content)
-    return {"tool_args": tool_args, "content": content or ""}
+    parsed = out["parsed"]
+    return {"parsed": parsed.model_dump() if parsed is not None else None,
+            "content": content or ""}
 
 
 # --- verdict parsing / validation --------------------------------------------------
@@ -287,15 +277,15 @@ def _first_json_object(text: str) -> dict | None:
 
 
 def parse_verdict(raw: dict) -> dict:
-    tool_err: Exception | None = None
-    if raw.get("tool_args"):
+    parse_err: Exception | None = None
+    if raw.get("parsed"):
         try:
-            return validate_verdict(raw["tool_args"])
+            return validate_verdict(raw["parsed"])
         except ValueError as exc:  # garbled tool call: the content may still carry JSON
-            tool_err = exc
+            parse_err = exc
     obj = _first_json_object(THINK_RE.sub("", raw.get("content") or ""))
     if obj is None:
-        raise ValueError(f"no JSON verdict in content and no usable tool call ({tool_err or 'none'})")
+        raise ValueError(f"no structured verdict and no JSON verdict in content ({parse_err or 'none'})")
     return validate_verdict(obj)
 
 
@@ -402,15 +392,10 @@ def judge_output(task: dict, workdir: Path, suite: Path, config: dict, *,
 # --- readiness check ---------------------------------------------------------------
 
 def check(suite: Path, env_file: Path | None = None) -> dict:
-    """Readiness report: key, deps, judge.md, and per-task dataset/rubric mode."""
-    try:
-        import langchain_openai  # noqa: F401, PLC0415
-        deps = True
-    except ImportError:
-        deps = False
+    """Readiness report: key, judge.md, and per-task dataset/rubric mode."""
     key = bool(load_api_key(env_file))
     has_rubric = (suite / "judge.md").is_file()
-    cfg = judge_config(suite_config(suite))
+    cfg = judge_config(score.suite_config(suite))
     missing: list[str] = []
     by_split: dict[str, dict[str, int]] = {}
     for row in suite_tasks(suite):
@@ -425,8 +410,6 @@ def check(suite: Path, env_file: Path | None = None) -> dict:
     dataset = sum(c["dataset"] for c in by_split.values())
     rubric_only = sum(c["rubric"] for c in by_split.values())
     warnings = []
-    if not deps:
-        warnings.append("LangChain not importable: .venv/bin/pip install -r requirements-judge.txt")
     if not key:
         warnings.append("no MiniMax API key: set MINIMAX_API_KEY or MINIMAX-API-KEY=... in .env")
     if not has_rubric:
@@ -438,8 +421,7 @@ def check(suite: Path, env_file: Path | None = None) -> dict:
             f"{rubric_only} task(s) run in RUBRIC-ONLY mode (no reference). Their verdicts "
             "are only as good as judge.md's description of the ideal. Preferred: give each "
             "task a 'reference' (a good output) so the loop climbs toward a dataset.")
-    return {"ready": deps and key and has_rubric and not missing, "deps": deps, "key": key,
-            "judge_md": has_rubric, "model": cfg["model"], "samples": int(cfg["samples"]),
+    return {"ready": key and has_rubric and not missing, "key": key, "judge_md": has_rubric, "model": cfg["model"], "samples": int(cfg["samples"]),
             "tasks": {"dataset": dataset, "rubric": rubric_only, "missing_reference": missing,
                       "by_split": by_split},
             "warnings": warnings}
@@ -448,8 +430,8 @@ def check(suite: Path, env_file: Path | None = None) -> dict:
 def print_check(report: dict) -> None:
     t = report["tasks"]
     print(f"judge readiness: {'READY' if report['ready'] else 'NOT READY'}")
-    print(f"  model={report['model']} samples={report['samples']} deps={report['deps']} "
-          f"key={report['key']} judge.md={report['judge_md']}")
+    print(f"  model={report['model']} samples={report['samples']} key={report['key']} "
+          f"judge.md={report['judge_md']}")
     print(f"  tasks: {t['dataset']} dataset-mode (scored against a reference), "
           f"{t['rubric']} rubric-only, {len(t['missing_reference'])} with a missing reference")
     for split, counts in t["by_split"].items():
@@ -474,7 +456,7 @@ def main() -> None:
         ap.error("--check or --workdir is required")
     wd = Path(args.workdir)
     task = json.loads((wd / "task.json").read_text(encoding="utf-8"))
-    print(json.dumps(judge_output(task, wd, suite, suite_config(suite)), indent=2))
+    print(json.dumps(judge_output(task, wd, suite, score.suite_config(suite)), indent=2))
 
 
 if __name__ == "__main__":
