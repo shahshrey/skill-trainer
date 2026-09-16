@@ -9,9 +9,6 @@ skill packages with planted defects, scored by MiniMax M3 through
 skills/skill-review/        the trainable skill: a deliberately weakened
                             starting point (report format only, no
                             checklist) so the loop has something to learn
-ceiling/skill-review/       the full original skill, for calibration only
-                            (never trained; the score it reaches is the
-                            headroom the loop is climbing toward)
 tasks/skill-review/
   judge.md                  the judge prompt: 4 criteria, weights, pass rule
   scoring.md                suite config: default_mode judge, 3 samples
@@ -52,15 +49,15 @@ gitignored there), write `runs/<tag>/config.json` from
 `rollout_model: claude-haiku-4-5-20251001`, and launch
 `./train.sh skill-review <tag> claude "" claude-haiku-4-5-20251001`.
 
-## A recorded run: results/j01
+## What a run looks like
 
-`results/j01/` holds a real bounded run (8 steps, Claude Haiku 4.5
-rollouts, K=2, MiniMax M3 judge with 3 samples): `results.tsv`,
-`config.json`, and the trained `SKILL.trained.md` / `META.trained.md`.
-Val mixed went 0.335 (baseline) -> 0.517 (step 1) -> 0.637 (step 4) ->
-0.774 after the epoch-boundary slow update; five steps were rejected by
-the paired gate. Every accepted edit is a review check the judge's
-feedback said was missing.
+A bounded 8-step run of this suite (Claude Haiku 4.5 rollouts, K=2,
+MiniMax M3 judge with 3 samples) took val mixed from 0.335 (baseline) to
+0.517 (step 1), 0.637 (step 4), and 0.774 after the epoch-boundary slow
+update; five steps were rejected by the paired gate. Every accepted edit
+was a review check the judge's feedback said was missing. On the unseen
+test split the trained skill scored 0.610 against 0.389 for the starting
+skill. Run artifacts stay in your task repo, not here (PROGRAM.md §8).
 
 ## Defect catalogue
 
