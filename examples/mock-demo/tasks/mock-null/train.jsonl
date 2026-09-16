@@ -1,0 +1,6 @@
+{"id": "null-train-0", "prompt": "Summarize the meeting notes.", "requires": [], "noise": 0.5, "scoring": {"required": ["RESULT: solved"]}}
+{"id": "null-train-1", "prompt": "Draft the weekly status update.", "requires": [], "noise": 0.5, "scoring": {"required": ["RESULT: solved"]}}
+{"id": "null-train-2", "prompt": "Rename the staging environment.", "requires": [], "noise": 0.5, "scoring": {"required": ["RESULT: solved"]}}
+{"id": "null-train-3", "prompt": "Tidy the changelog.", "requires": [], "noise": 0.5, "scoring": {"required": ["RESULT: solved"]}}
+{"id": "null-train-4", "prompt": "Rewrite the onboarding doc intro.", "requires": [], "noise": 0.5, "scoring": {"required": ["RESULT: solved"]}}
+{"id": "null-train-5", "prompt": "Label the support tickets.", "requires": [], "noise": 0.5, "scoring": {"required": ["RESULT: solved"]}}

@@ -1,0 +1,22 @@
+{
+  "id": "r12",
+  "dirname": "cron-scheduler",
+  "topic": "Create and validate cron schedules for recurring jobs",
+  "defects": [
+    {
+      "code": "desc-vague",
+      "location": "SKILL.md frontmatter line 2",
+      "detail": "The description 'Helps with scheduling things.' is generic and unspecific, providing no concrete details about what the skill covers or when to use it."
+    },
+    {
+      "code": "dir-name-mismatch",
+      "location": "SKILL.md frontmatter line 1 vs. directory name",
+      "detail": "The frontmatter name is 'cron-schedule' but the directory is 'cron-scheduler', creating a mismatch between the skill name and its location."
+    },
+    {
+      "code": "inconsistent-terms",
+      "location": "SKILL.md throughout body (lines 22, 26, 30, 37, 49, 52, 54, 65)",
+      "detail": "The skill mixes 'job', 'task', and 'entry' to refer to the same concept (a scheduled unit of work): 'run recurring jobs' (description), 'Setting Up a Cron Task' (heading), 'typical cron job' (body), 'scheduled entry ran' (body), 'the entry has write permissions' (body), 'Not testing the job command' (body), 'Test the entry command' (body), 'backup task is scheduled' (checklist)."
+    }
+  ]
+}

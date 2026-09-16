@@ -1,0 +1,27 @@
+{
+  "id": "r15",
+  "dirname": "env-setup",
+  "topic": "Bootstrap a local development environment from a fresh clone",
+  "defects": [
+    {
+      "code": "body-second-person",
+      "location": "SKILL.md Step-by-step setup section, lines ~26-40",
+      "detail": "Multiple sentences use 'You should' voice: 'You should run', 'You should select', 'You should activate', 'You should wait', 'You should run' (5 instances)"
+    },
+    {
+      "code": "time-sensitive",
+      "location": "SKILL.md Step 2 Install Node.js section, around line ~31",
+      "detail": "Contains 'Before January 2026 install Node 20; after that Node 22' which is a dated conditional that will become incorrect after January 2026"
+    },
+    {
+      "code": "missing-script",
+      "location": "SKILL.md Step 5 Verify installation section, around line ~38",
+      "detail": "Command references 'scripts/check_env.sh' which does not exist in the scripts directory; however scripts/install_deps.sh does exist"
+    },
+    {
+      "code": "magic-number",
+      "location": "SKILL.md Step 4 Database setup section, around line ~35",
+      "detail": "States 'wait 37 seconds for the database' with no explanation for why this specific duration is needed"
+    }
+  ]
+}

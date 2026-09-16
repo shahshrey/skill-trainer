@@ -17,17 +17,23 @@ default declared in the first fenced ```json block of tasks/X/scoring.md:
              TASK_OUTPUT=<output.txt>; exit 0 -> hard 1
   rubric     tasks/X/rubric.py::score(task, workdir, mode) -> {hard, soft, checks}
              (suite-specific deps allowed there; this harness core is stdlib)
+  judge      LLM-as-judge (harness/judge.py): tasks/X/judge.md is the judge
+             prompt; a task's "reference" makes it dataset-mode, none makes
+             it rubric-mode. Structured verdict -> {hard, soft, checks}.
+             Needs requirements-judge.txt + a MiniMax key; see judge.py.
 
 Batch aggregates are reported overall and per task["suite"] value (e.g.
 "clone" vs "workflow-A") so the manager can apply the two-suite gate rule.
 mixed = (1-w)*hard + w*soft with w from suite config (default 0.5).
 
 Every report carries ``rubric_version``, a hash of the suite's scoring
-contract (scoring.md + rubric.py). A verdict is only as good as the rubric
-that produced it, so the paired gate refuses to compare reports stamped
-by different versions and the post-run audit checks a run never drifted.
+contract (scoring.md + rubric.py + judge.md). A verdict is only as good as
+the rubric that produced it, so the paired gate refuses to compare reports
+stamped by different versions and the post-run audit checks a run never
+drifted.
 
-Deterministic; no LLM calls. Exit 0 on success, 2 on scoring errors.
+Deterministic and LLM-free in every mode except ``judge``, which makes
+model calls only through judge.py. Exit 0 on success, 2 on scoring errors.
 """
 from __future__ import annotations
 
@@ -43,7 +49,7 @@ from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 FENCED_JSON_RE = re.compile(r"```json\s*\n([\s\S]*?)\n```")
-RUBRIC_FILES = ("scoring.md", "rubric.py")  # the scoring contract
+RUBRIC_FILES = ("scoring.md", "rubric.py", "judge.md")  # the scoring contract
 
 
 def rubric_version(suite: Path) -> str:
@@ -82,7 +88,8 @@ def scoring_mode(task: dict, config: dict) -> str:
     return (task.get("scoring") or {}).get("mode") or config.get("default_mode", "checklist")
 
 
-def score_task(task: dict, workdir: Path, mode: str, config: dict, rubric) -> dict:
+def score_task(task: dict, workdir: Path, mode: str, config: dict, rubric,
+               suite: Path | None = None) -> dict:
     scoring = task.get("scoring") or {}
     smode = scoring_mode(task, config)
     output_path = workdir / "output.txt"
@@ -90,6 +97,14 @@ def score_task(task: dict, workdir: Path, mode: str, config: dict, rubric) -> di
 
     if not output.strip() and smode != "rubric":
         return {"hard": 0, "soft": 0.0, "checks": ["output_empty"], "mode": smode}
+
+    if smode == "judge":
+        if suite is None:
+            raise ValueError("scoring mode 'judge' needs the suite directory")
+        import judge  # noqa: PLC0415; lazy so the stdlib-only modes never pay for it
+        result = judge.judge_output(task, workdir, suite, config)
+        return {"hard": int(result["hard"]), "soft": round(float(result["soft"]), 4),
+                "checks": list(result["checks"]), "mode": smode}
 
     if smode == "exact":
         ok = re.search(scoring["expected"], output) is not None
@@ -150,7 +165,7 @@ def _score_one(payload: tuple[str, str, str]) -> tuple[str, dict]:
     config = suite_config(suite)
     task = json.loads((wd / "task.json").read_text(encoding="utf-8"))
     rubric = load_rubric(suite) if scoring_mode(task, config) == "rubric" else None
-    result = dict(score_task(task, wd, mode, config, rubric),
+    result = dict(score_task(task, wd, mode, config, rubric, suite=suite),
                   task=str(task.get("id")),
                   suite=str(task.get("suite", "primary")))
     return wd.name, result

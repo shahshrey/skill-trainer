@@ -1,0 +1,22 @@
+{
+  "id": "r05",
+  "dirname": "api-client",
+  "topic": "Generate a typed HTTP client from an OpenAPI spec",
+  "defects": [
+    {
+      "code": "desc-vague",
+      "location": "SKILL.md frontmatter, description line",
+      "detail": "Description is generic: 'Helps with APIs and code generation.' does not specify what the skill does or when to use it"
+    },
+    {
+      "code": "dir-name-mismatch",
+      "location": "SKILL.md frontmatter name vs directory name",
+      "detail": "Frontmatter name is 'api-http-client' but directory is named 'api-client'; they must match"
+    },
+    {
+      "code": "options-no-default",
+      "location": "SKILL.md Configuration section, the HTTP library choice",
+      "detail": "Lists 'requests, httpx, or aiohttp' as choices with no stated default"
+    }
+  ]
+}

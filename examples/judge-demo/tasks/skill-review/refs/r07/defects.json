@@ -1,0 +1,22 @@
+{
+  "id": "r07",
+  "dirname": "image-resize",
+  "topic": "Batch resize and convert images for the web",
+  "defects": [
+    {
+      "code": "windows-path",
+      "location": "SKILL.md How to use section, the command",
+      "detail": "Path uses backslash: 'scripts\\resize.py' instead of forward slash 'scripts/resize.py'"
+    },
+    {
+      "code": "undocumented-binary",
+      "location": "SKILL.md Features and description sections (implied)",
+      "detail": "The skill description and usage imply calls to ImageMagick 'convert' command (for image resizing and format conversion) but never list it as a dependency or requirement"
+    },
+    {
+      "code": "desc-no-trigger",
+      "location": "SKILL.md frontmatter, description",
+      "detail": "Description states what the skill does but has no 'Use when...' trigger clause to indicate when an agent should invoke it"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/banner.png" width="900px" alt="skill-trainer: stop writing skills, start training them">
+  <img src="assets/banner.png" width="900px" alt="skill-trainer: stop writing skills, start training them">
 </p>
 
 <div align="center">
@@ -84,7 +84,7 @@ pure-noise suite the trainer correctly accepts ~nothing:
 ## How it works
 
 <p align="center">
-  <img src="docs/training-loop.gif" width="900px" alt="Animated diagram of one training step: the editor agent proposes bounded edits, the lint gate checks them, the candidate is committed, parallel rollout workers run held-out val tasks, score.py produces a number, and the verdict either keeps the edit (branch advances) or rejects it (git reset --hard, edit goes to the rejected buffer)">
+  <img src="assets/training-loop.gif" width="900px" alt="Animated diagram of one training step: the editor agent proposes bounded edits, the lint gate checks them, the candidate is committed, parallel rollout workers run held-out val tasks, score.py produces a number, and the verdict either keeps the edit (branch advances) or rejects it (git reset --hard, edit goes to the rejected buffer)">
 </p>
 
 1. An editor agent proposes a small set of bounded edits to `SKILL.md`,
@@ -93,7 +93,8 @@ pure-noise suite the trainer correctly accepts ~nothing:
    candidate.
 3. Parallel rollout workers run the candidate against a held-out
    validation set. `score.py` turns the outputs into a number,
-   deterministically, with no LLM judging.
+   deterministically by default, or through a structured LLM judge for
+   suites that opt into `judge` mode.
 4. If the candidate is strictly better, the branch advances. Otherwise
    `git reset --hard`, and the rejected edit text goes into a buffer
    future editors read.
@@ -143,18 +144,11 @@ the skills they train live in your working copy; `tasks/` and `skills/`
 are gitignored here by design.
 
 **Step 1: find the tasks.** The best training tasks are the requests you
-already make of your agent over and over. `harness/harvest.py` mines your
-local transcripts (Claude Code, Codex, Cursor) for prompts that recur
-across sessions and writes them out as candidates:
-
-```bash
-.venv/bin/python harness/harvest.py --source all --project <your-repo-path> --out candidates.jsonl
-```
-
-Each candidate carries the representative prompt, how often it recurred,
-a guess at whether the agent got it right (from your follow-up message),
-and file references back to the sessions. It only reads transcripts; you
-curate the candidates into `train.jsonl` and `val.jsonl` yourself.
+already make of your agent over and over, especially the ones it gets
+wrong. Write those down as prompts, and for each one decide what a correct
+answer must contain. That second part is the work: a task without a
+checkable outcome cannot gate an edit, and nothing in this framework can
+invent it for you.
 
 **Step 2: shape the suite.** The bundled
 [`examples/mock-demo`](examples/mock-demo) is a complete working suite to
@@ -174,10 +168,50 @@ tasks/<skill-name>/
 ```
 
 Each line of a `.jsonl` file is a task: `{"id": ..., "prompt": ...,
-"files": [...], "scoring": {...}}`. Four scoring modes are built in:
+"files": [...], "scoring": {...}}`. Five scoring modes are built in:
 `exact` (regex on output), `checklist` (required substrings), `command`
-(exit code), and `rubric` (your `rubric.py`). Scoring is deterministic and
-makes no LLM calls.
+(exit code), `rubric` (your `rubric.py`), and `judge` (an LLM judge, below).
+The first four are deterministic and make no LLM calls.
+
+### LLM-judged suites
+
+Some skills cannot be scored deterministically: UI design, how human a
+text reads, the quality of a review. The `judge` mode asks an LLM for a
+**structured verdict** and feeds the same hard/soft numbers into the
+unchanged paired gate. It is a separate way to measure, not a replacement:
+a suite picks its mode in `scoring.md`.
+
+```
+tasks/<skill-name>/
+  judge.md           the judge prompt for THIS skill: criteria, weights,
+                     what "pass" means (part of the scoring contract)
+  scoring.md         {"default_mode": "judge", "judge": {"samples": 3, ...}}
+  train.jsonl        each task may carry "reference": "<path>" (a good
+                     output) and "judge_inputs": ["<workdir globs>"]
+```
+
+The judge needs a definition of *good*, and there are two ways to give it
+one, in order of preference:
+
+1. **A dataset.** Give each task a `reference`: what a good output looks
+   like for that prompt. The judge scores closeness to the reference, so
+   the loop climbs toward a concrete target exactly like a deterministic
+   suite. This is the default and the one to reach for first.
+2. **A rubric only.** No reference; `judge.md` alone describes the ideal.
+   This works only as well as the rubric is written.
+
+`harness/judge.py --check --suite tasks/<skill>` reports which mode each
+task runs in, warns about rubric-only tasks, and verifies the key, the
+dependency, and every reference path. `run_task.py --smoke` runs the same
+check for judge suites.
+
+The judge model is MiniMax M3 through its OpenAI-compatible API, driven by
+the LangChain SDK (`bind_tools` with a verdict schema; content JSON as the
+fallback). Install `requirements-judge.txt` into the venv and put the key
+in the repo `.env` as `MINIMAX-API-KEY=...` (or export `MINIMAX_API_KEY`).
+Verdicts are cached per workspace in `judge.json`, `judge.md` is hashed
+into `rubric_version`, and `examples/judge-demo` is a complete judged suite
+that trains a skill-review skill against 16 synthetic flawed skills.
 
 The skill being trained lives at `skills/<skill-name>/SKILL.md`, with
 optimizer memory in `META.md` beside it.
@@ -209,6 +243,7 @@ train.sh              relaunch wrapper; keeps the manager alive
 prompts/              worker prompt templates (editor, ranker, rollout, ...)
 harness/              the training engine; read-only during training
 examples/mock-demo/   complete example suite; template + meta-eval fixture
+examples/judge-demo/  LLM-judged suite: skill-review trained on flawed skills
 runs/CONFIG_TEMPLATE.md  canonical run config
 tests/                deterministic framework tests + meta_eval.py
 tasks/<name>/         your task suites (gitignored; yours to provide)

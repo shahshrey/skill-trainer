@@ -1,0 +1,27 @@
+{
+  "id": "r11",
+  "dirname": "s3-sync",
+  "topic": "Sync a local directory to an S3 bucket with safe deletes",
+  "defects": [
+    {
+      "code": "desc-second-person",
+      "location": "SKILL.md frontmatter line 2",
+      "detail": "The description begins with 'You can use this to synchronize', using second-person voice instead of third-person descriptive voice."
+    },
+    {
+      "code": "extraneous-files",
+      "location": "README.md at root of skill directory",
+      "detail": "User-facing documentation (README.md with installation instructions) is included in the skill directory, which should contain only SKILL.md and referenced resources like scripts or documentation files."
+    },
+    {
+      "code": "magic-number",
+      "location": "SKILL.md line ~32",
+      "detail": "The command sets 'max_concurrent_requests 23' with no explanation of why this specific number is chosen or how to determine the right value for a given environment."
+    },
+    {
+      "code": "undocumented-binary",
+      "location": "SKILL.md lines 18, 27, 47, 52",
+      "detail": "All commands use the 'aws' CLI tool, but the skill never lists AWS CLI as a dependency or requirement. An agent following this skill would not know what binary needs to be installed."
+    }
+  ]
+}

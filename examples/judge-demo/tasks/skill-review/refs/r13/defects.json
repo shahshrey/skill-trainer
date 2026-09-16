@@ -1,0 +1,22 @@
+{
+  "id": "r13",
+  "dirname": "i18n-extract",
+  "topic": "Extract translatable strings from source code into locale files",
+  "defects": [
+    {
+      "code": "windows-path",
+      "location": "SKILL.md line ~12, Quick start section",
+      "detail": "Command uses `scripts\\extract.py` with backslash instead of forward slash"
+    },
+    {
+      "code": "nested-refs",
+      "location": "SKILL.md line ~22 links references/formats.md, which line ~12 links references/plural-rules.md",
+      "detail": "Plural rule content is only in plural-rules.md; formats.md just references it rather than containing the information"
+    },
+    {
+      "code": "desc-no-trigger",
+      "location": "SKILL.md frontmatter description",
+      "detail": "Description explains what the skill does but never includes 'Use when' or any trigger condition for when to use it"
+    }
+  ]
+}

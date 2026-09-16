@@ -25,6 +25,13 @@ pattern below earned its place in a live run; the notes say why.
 }
 ```
 
+Judge-mode suites (`scoring.md` default_mode `judge`): cheap and full are
+the same pass (the judge does not get more expensive per mode), so run
+single-mode with `gate_modes: {"step": "cheap", "epoch": "cheap"}` and
+note in `gate_note` that receipts must carry the `judge.json` reasoning
+(PROGRAM §4a). Verify readiness first:
+`harness/judge.py --check --suite tasks/<skill>`.
+
 Launch:
 
 ```bash

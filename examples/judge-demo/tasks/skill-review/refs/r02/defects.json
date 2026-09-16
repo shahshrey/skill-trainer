@@ -1,0 +1,22 @@
+{
+  "id": "r02",
+  "dirname": "csv-cleaner",
+  "topic": "Clean and normalize messy CSV files",
+  "defects": [
+    {
+      "code": "desc-no-trigger",
+      "location": "SKILL.md frontmatter, line 2",
+      "detail": "description explains what the skill does but contains no 'Use when' or trigger clause indicating when to apply it"
+    },
+    {
+      "code": "options-no-default",
+      "location": "SKILL.md Implementation section, lines 10-20",
+      "detail": "command examples list three engine options (pandas, polars, duckdb) with no indication of which is the default"
+    },
+    {
+      "code": "magic-number",
+      "location": "SKILL.md Advanced usage section, line 31",
+      "detail": "text references 'sample the first 731 rows' with no explanation for why this specific number was chosen"
+    }
+  ]
+}
