@@ -46,9 +46,12 @@ HARNESS = Path(__file__).resolve().parent
 # failures (connection lost, network errors) leave the same tiny-output
 # signature when the backend's own retries give up. Detect both, retry with
 # backoff, and refuse to score a batch that stays contaminated.
+# "limit" alone is not a signal: a short SQL answer ending in LIMIT 3 is a
+# real rollout, not a rate-limit banner. Match the phrases the CLIs print.
 CONTAM_RE = re.compile(
-    rb"limit|overload|quota|resets|too many requests|"
-    rb"connection lost|network error|econnre|socket hang up", re.I)
+    rb"(session|rate|usage|daily|weekly|token|message|spending)[\s_-]+limit|"
+    rb"limit[\s_-]+(reached|exceeded|hit)|hit your|overload|quota|resets|"
+    rb"too many requests|connection lost|network error|econnre|socket hang up", re.I)
 CONTAM_MAX_BYTES = 300
 
 

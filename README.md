@@ -19,7 +19,7 @@ coding agent is the editor, the rollout worker, and the manager.
 [![python](https://img.shields.io/badge/python-3.11+-blue)](https://www.python.org)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-**[Run it now](#run-it-now)** · **[How it works](#how-it-works)** · **[What a run produces](#what-a-run-produces)** · **[Bring your own task](#bring-your-own-task-suite)** · **[Launch a training run](#launch-a-real-training-run)**
+**[Tutorial](docs/tutorial/README.md)** · **[Run it now](#run-it-now)** · **[How it works](#how-it-works)** · **[What a run produces](#what-a-run-produces)** · **[Bring your own task](#bring-your-own-task-suite)** · **[Launch a training run](#launch-a-real-training-run)**
 
 </div>
 
@@ -247,7 +247,9 @@ train.sh              relaunch wrapper; keeps the manager alive
 prompts/              worker prompt templates (editor, ranker, rollout, ...)
 harness/              the training engine; read-only during training
 examples/mock-demo/   complete example suite; template + meta-eval fixture
+examples/sql-demo/    the tutorial's suite: SQL queries scored by row diff
 examples/judge-demo/  LLM-judged suite: skill-review trained on flawed skills
+docs/tutorial/        six chapters from clone to a trained skill
 runs/CONFIG_TEMPLATE.md  canonical run config
 tests/                deterministic framework tests + meta_eval.py
 tasks/<name>/         your task suites (gitignored; yours to provide)

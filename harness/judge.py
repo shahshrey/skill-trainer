@@ -93,7 +93,7 @@ class CriterionScore(BaseModel):
 class JudgeVerdict(BaseModel):
     """The structured verdict for the output under evaluation."""
 
-    criteria: list[CriterionScore] = Field(description=(
+    criteria: list[CriterionScore] = Field(min_length=1, description=(
         "One entry per criterion named in the rubric: none skipped, none invented."))
     overall: float = Field(ge=0.0, le=1.0, description=(
         "The weighted combination of the criterion scores as the rubric defines it, "
@@ -225,13 +225,8 @@ def call_model(messages: tuple[str, str], cfg: dict, api_key: str) -> dict:
     system, user = messages
     out = make_llm(cfg, api_key).invoke([SystemMessage(content=system),
                                          HumanMessage(content=user)])
-    content = out["raw"].content
-    if isinstance(content, list):  # some providers return content parts
-        content = "".join(part.get("text", "") if isinstance(part, dict) else str(part)
-                          for part in content)
     parsed = out["parsed"]
-    return {"parsed": parsed.model_dump() if parsed is not None else None,
-            "content": content or ""}
+    return {"parsed": parsed.model_dump() if parsed else None, "content": out["raw"].text}
 
 
 # --- verdict parsing / validation --------------------------------------------------
@@ -277,15 +272,9 @@ def _first_json_object(text: str) -> dict | None:
 
 
 def parse_verdict(raw: dict) -> dict:
-    parse_err: Exception | None = None
-    if raw.get("parsed"):
-        try:
-            return validate_verdict(raw["parsed"])
-        except ValueError as exc:  # garbled tool call: the content may still carry JSON
-            parse_err = exc
-    obj = _first_json_object(THINK_RE.sub("", raw.get("content") or ""))
+    obj = raw.get("parsed") or _first_json_object(THINK_RE.sub("", raw.get("content") or ""))
     if obj is None:
-        raise ValueError(f"no structured verdict and no JSON verdict in content ({parse_err or 'none'})")
+        raise ValueError("no structured verdict and no JSON verdict in content")
     return validate_verdict(obj)
 
 
