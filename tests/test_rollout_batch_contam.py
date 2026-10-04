@@ -124,3 +124,21 @@ def test_skip_existing_reruns_contaminated_workspace(tmp_path):
     assert summary["skipped"] == []  # poisoned workspace does NOT count as clean
     assert "t00_s0" in summary["completed"]
     assert "fresh rollout output" in (poisoned / "output.txt").read_text()
+
+
+def test_short_sql_answer_with_limit_clause_is_not_contaminated(tmp_path):
+    """A rollout whose whole reply is a query ending in LIMIT 3 is a real
+    answer; "limit" alone must not trigger the rate-limit retry path."""
+    sys.path.insert(0, str(HARNESS))
+    from rollout_batch import contaminated
+    wd = tmp_path / "t04_s0"
+    wd.mkdir()
+    (wd / "output.txt").write_text(
+        "```sql\nSELECT p.name, SUM(oi.quantity) AS units FROM order_items oi\n"
+        "JOIN products p ON p.id = oi.product_id GROUP BY p.id\n"
+        "ORDER BY units DESC LIMIT 3;\n```\n")
+    assert not contaminated(wd)
+    for banner in (LIMIT_TEXT, '{"error": {"type": "rate_limit_error"}}',
+                   "API Error: 429 rate-limited"):
+        (wd / "output.txt").write_text(banner)
+        assert contaminated(wd), banner

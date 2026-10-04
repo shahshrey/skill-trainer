@@ -19,3 +19,7 @@ __pycache__/
 
 # Secrets (judge API keys)
 .env
+
+# Talk materials (not part of the project)
+/deck/
+/Claude outputs/

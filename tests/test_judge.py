@@ -51,6 +51,13 @@ def test_parse_falls_back_to_json_in_content_and_strips_think():
     assert v["overall"] == 0.4 and v["passed"] is False
 
 
+def test_structured_schema_rejects_empty_criteria():
+    """An empty tool-call verdict must fail schema validation, so LangChain
+    reports parsed=None and parse_verdict falls back to the content JSON."""
+    with pytest.raises(ValueError):
+        judge.JudgeVerdict.model_validate({**verdict(0.5, True), "criteria": []})
+
+
 def test_parse_rejects_garbage():
     with pytest.raises(ValueError):
         judge.parse_verdict({"parsed": None, "content": "<think>hmm</think> no json here"})
